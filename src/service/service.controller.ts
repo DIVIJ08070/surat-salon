@@ -17,6 +17,7 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UserRole, ServiceCategory, Gender } from 'src/common/enums';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @ApiTags('Services')
 @Controller('services')
@@ -31,16 +32,21 @@ export class ServiceController {
     return this.serviceService.create(createServiceDto);
   }
 
-  // GET /services?category=hair&gender=female  → all authenticated users
+  // GET /services?category=hair&gender=female&page=1&limit=10
   @Get()
-  @ApiOperation({ summary: 'Get all active services (optional filters: category, gender)' })
+  @ApiOperation({ summary: 'Get all active services with pagination (default: 10 per page)' })
   @ApiQuery({ name: 'category', enum: ServiceCategory, required: false })
   @ApiQuery({ name: 'gender', enum: Gender, required: false })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
   findAll(
     @Query('category') category?: ServiceCategory,
     @Query('gender') gender?: Gender,
+    @Query() pagination?: PaginationDto,
   ) {
-    return this.serviceService.findAll(category, gender);
+    const page = pagination?.page ?? 1;
+    const limit = pagination?.limit ?? 10;
+    return this.serviceService.findAll(category, gender, page, limit);
   }
 
   // GET /services/:id

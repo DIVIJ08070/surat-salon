@@ -13,6 +13,9 @@ import { AuthModule } from './auth/auth.module';
 import { AuthMiddleware } from './auth/middleware/auth.middleware';
 import { RolesGuard } from './common/guards/roles.guard';
 import { ServiceModule } from './service/service.module';
+import { StylistModule } from './stylist/stylist.module';
+import { CustomerModule } from './customer/customer.module';
+import { StylistLeaveModule } from './stylist-leave/stylist-leave.module';
 
 @Module({
   imports: [
@@ -41,6 +44,9 @@ import { ServiceModule } from './service/service.module';
     UserModule,
     AuthModule,
     ServiceModule,
+    StylistModule,
+    CustomerModule,
+    StylistLeaveModule,
   ],
   controllers: [AppController],
   providers: [

@@ -18,20 +18,21 @@ export class ServiceService {
   ) {}
 
   // ─── AUTO-GENERATE SERVICE CODE ───────────────────────────────────────────────
-  // Format: SVC001, SVC002, ...
+  // Format: SRV-001, SRV-002, ... (sequential, as per spec)
   private async generateServiceCode(): Promise<string> {
     const rows: { service_code: string }[] = await this.serviceRepository.query(
       `SELECT service_code FROM services ORDER BY id DESC LIMIT 1`,
     );
 
     if (!rows || rows.length === 0) {
-      return 'SVC001';
+      return 'SRV-001';
     }
 
-    const lastCode = rows[0].service_code; // e.g. "SVC007"
-    const num = parseInt(lastCode.replace('SVC', ''), 10); // → 7
+    // e.g. "SRV-007" → split('-') → ["SRV", "007"] → 7
+    const lastCode = rows[0].service_code;
+    const num = parseInt(lastCode.split('-')[1], 10);
     const next = num + 1;
-    return `SVC${String(next).padStart(3, '0')}`; // → "SVC008"
+    return `SRV-${String(next).padStart(3, '0')}`; // → "SRV-008"
   }
 
   // ─── CREATE ──────────────────────────────────────────────────────────────────
@@ -55,22 +56,45 @@ export class ServiceService {
 
   // ─── READ ALL ─────────────────────────────────────────────────────────────────
 
-  async findAll(category?: ServiceCategory, gender?: Gender): Promise<Service[]> {
-    let sql = `SELECT * FROM services WHERE status = 1`;
-    const params: string[] = [];
+  async findAll(
+    category?: ServiceCategory,
+    gender?: Gender,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{ data: Service[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
+    const offset = (page - 1) * limit;
+    const whereParams: string[] = [];
+    let whereSql = `WHERE status = 1`;
 
     if (category) {
-      sql += ` AND category = ?`;
-      params.push(category);
+      whereSql += ` AND category = ?`;
+      whereParams.push(category);
     }
     if (gender) {
-      sql += ` AND gender = ?`;
-      params.push(gender);
+      whereSql += ` AND gender = ?`;
+      whereParams.push(gender);
     }
 
-    sql += ` ORDER BY category ASC, name ASC`;
+    const countRows: { total: string }[] = await this.serviceRepository.query(
+      `SELECT COUNT(*) AS total FROM services ${whereSql}`,
+      whereParams,
+    );
+    const total = parseInt(countRows[0].total, 10);
 
-    return this.serviceRepository.query(sql, params);
+    const data: Service[] = await this.serviceRepository.query(
+      `SELECT * FROM services ${whereSql} ORDER BY category ASC, name ASC LIMIT ? OFFSET ?`,
+      [...whereParams, limit, offset],
+    );
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   // ─── READ ONE ─────────────────────────────────────────────────────────────────
