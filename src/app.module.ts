@@ -12,6 +12,7 @@ import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthMiddleware } from './auth/middleware/auth.middleware';
 import { RolesGuard } from './common/guards/roles.guard';
+import { ServiceModule } from './service/service.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     }),
     UserModule,
     AuthModule,
+    ServiceModule,
   ],
   controllers: [AppController],
   providers: [
