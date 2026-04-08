@@ -1,51 +1,51 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
-import { Response } from 'express';
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
 
-interface HttpExceptionResponse {
-  message?: string | string[];
-}
-
-function isHttpExceptionResponse(obj: unknown): obj is HttpExceptionResponse {
-  return typeof obj === 'object' && obj !== null;
+interface ErrorResponse {
+  success: false;
+  statusCode: number;
+  message: string | object;
+  path: string;
+  timestamp: string;
 }
 
 @Catch()
-export class GlobalExceptionFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost): void {
+export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  catch(exception: Error, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
 
-    let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'Internal server error';
+    const status =
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    if (exception instanceof HttpException) {
-      status = exception.getStatus();
-      const exceptionResponse = exception.getResponse();
+    const message =
+      exception instanceof HttpException
+        ? exception.getResponse()
+        : 'Internal server error';
 
-      if (typeof exceptionResponse === 'string') {
-        message = exceptionResponse;
-      } else if (isHttpExceptionResponse(exceptionResponse)) {
-        if (Array.isArray(exceptionResponse.message)) {
-          message = exceptionResponse.message.join(', ');
-        } else if (typeof exceptionResponse.message === 'string') {
-          message = exceptionResponse.message;
-        } else {
-          message = exception.message;
-        }
-      } else {
-        message = exception.message;
-      }
-    } else if (exception instanceof Error) {
-      // Retain true error message for non-http exceptions to aide debugging
-      message = exception.message;
-    }
+    this.logger.error(`${request.method} ${request.url}`, exception.stack);
+    console.error('FULL ERROR:', exception);
 
-    const errorResponse = {
+    const errorBody: ErrorResponse = {
       success: false,
-      message,
       statusCode: status,
+      message,
+      path: request.url,
+      timestamp: new Date().toISOString(),
     };
 
-    response.status(status).json(errorResponse);
+    response.status(status).json(errorBody);
   }
 }

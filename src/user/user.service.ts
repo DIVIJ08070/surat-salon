@@ -37,22 +37,23 @@ export class UserService {
   }
 
   async lockAccount(id: number, lockedUntil: Date, failedAttempts: number): Promise<void> {
-    await this.userRepository.update(id, {
-      lockedUntil,
-      failedAttempts,
-    });
+    await this.userRepository.query(
+      'UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?',
+      [failedAttempts, lockedUntil, id],
+    );
   }
 
   async incrementFailedAttempts(id: number, failedAttempts: number): Promise<void> {
-    await this.userRepository.update(id, {
-      failedAttempts,
-    });
+    await this.userRepository.query(
+      'UPDATE users SET failed_attempts = ? WHERE id = ?',
+      [failedAttempts, id],
+    );
   }
 
   async resetFailedAttempts(id: number): Promise<void> {
-    await this.userRepository.update(id, {
-      failedAttempts: 0,
-      lockedUntil: null,
-    });
+    await this.userRepository.query(
+      'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?',
+      [id],
+    );
   }
 }

@@ -1,40 +1,32 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import {
+  CallHandler,
+  ExecutionContext,
+  Injectable,
+  NestInterceptor,
+  Logger,
+} from '@nestjs/common';
 import { Request } from 'express';
+import { Observable, tap } from 'rxjs';
+import { AuthUser } from 'src/auth/jwt.stratergy';
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id?: number;
-    userId?: number;
-  };
+interface RequestWithUser extends Request {
+  user?: AuthUser;
 }
 
 @Injectable()
-export class LoggingInterceptor implements NestInterceptor<unknown, unknown> {
-  private readonly logger = new Logger('HTTP');
+export class LoggingInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(LoggingInterceptor.name);
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const ctx = context.switchToHttp();
-    const request = ctx.getRequest<AuthenticatedRequest>();
-    
-    let userIdStr = 'Anonymous';
-    if (request.user) {
-      if (request.user.id) {
-        userIdStr = String(request.user.id);
-      } else if (request.user.userId) {
-        userIdStr = String(request.user.userId);
-      }
-    }
-    
-    const method = request.method;
-    const url = request.url;
-    const now = Date.now();
+  intercept(ctx: ExecutionContext, next: CallHandler): Observable<object> {
+    const request = ctx.switchToHttp().getRequest<RequestWithUser>();
+    const { method, url } = request;
+    const userId = request.user?.user_id ?? 'unauthenticated';
+    const startTime = Date.now();
 
     return next.handle().pipe(
       tap(() => {
-        const responseTime = Date.now() - now;
-        this.logger.log(`[Method: ${method}] [URL: ${url}] [User: ${userIdStr}] - ${responseTime}ms`);
+        const responseTime = Date.now() - startTime;
+        this.logger.log(`${method} ${url} | user: ${userId} | ${responseTime}ms`);
       }),
     );
   }

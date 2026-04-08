@@ -9,10 +9,11 @@ import { UserModule } from 'src/user/user.module';
 @Module({
   imports: [
     JwtModule.register({}),
-    TypeOrmModule.forFeature([RefreshToken,TokenBlacklist]),
-    UserModule
+    TypeOrmModule.forFeature([RefreshToken, TokenBlacklist]),
+    UserModule,
   ],
   controllers: [AuthController],
   providers: [AuthService],
+  exports: [JwtModule],
 })
 export class AuthModule {}

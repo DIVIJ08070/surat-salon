@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserService } from 'src/user/user.service';
+import { LogoutDto } from './dto/logout.dto';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MINUTES = 15;
@@ -25,38 +26,46 @@ export class AuthService {
     ) {}
 
     private generateAccessToken(user: User):string {
-    const jti = uuidv4();
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-      jti,
-    };
-    const token = this.jwtService.sign(payload, {
-      secret: process.env.JWT_ACCESS_SECRET || 'development_access_secret',
-      expiresIn: (process.env.JWT_ACCESS_EXPIRATION || '15m') as StringValue,
-    });
-    return token;
-  }
+      try {
+        const jti = uuidv4();
+        const payload = {
+          sub: user.id,
+          email: user.email,
+          role: user.role,
+          jti,
+        };
+        const token = this.jwtService.sign(payload, {
+          secret: process.env.JWT_ACCESS_SECRET || 'development_access_secret',
+          expiresIn: (process.env.JWT_ACCESS_EXPIRATION || '15m') as StringValue,
+        });
+        return token;
+      } catch (error) {
+        throw error;
+      }
+    }
 
-    private async generateRefreshToken(id: number){
-      const rawtoken = this.jwtService.sign({ sub: id }, {
-        secret: process.env.JWT_REFRESH_SECRET || 'development_refresh_secret',
-        expiresIn: (process.env.JWT_REFRESH_EXPIRATION || '7d') as StringValue,
-      });
-      const token = await bcrypt.hash(rawtoken, 10);
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '7', 10));
-      const refreshToken = this.refreshTokenRepository.create({
-        tokenHash: token,
-        expiresAt,
-        user: { id },
-      });
-      await this.refreshTokenRepository.save(refreshToken); 
-      return rawtoken;
+    private async generateRefreshToken(id: number):Promise<string>{
+      try {
+        const rawtoken = this.jwtService.sign({ sub: id }, {
+          secret: process.env.JWT_REFRESH_SECRET || 'development_refresh_secret',
+          expiresIn: (process.env.JWT_REFRESH_EXPIRATION || '7d') as StringValue,
+        });
+        const token = await bcrypt.hash(rawtoken, 10);
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '7', 10));
+        const refreshToken = this.refreshTokenRepository.create({
+          tokenHash: token,
+          expiresAt,
+          user: { id },
+        });
+        await this.refreshTokenRepository.save(refreshToken); 
+        return rawtoken;
+      } catch (error) {
+        throw error;
+      }
     }   
 
-    async signup(createUserDto: CreateUserDto){
+    async signup(createUserDto: CreateUserDto):Promise<LogoutDto>{
       try{
           const user = await this.userService.findByEmail(createUserDto.email);
           if(user){
@@ -72,11 +81,11 @@ export class AuthService {
       }
     }
 
-    async login(loginDto: LoginDto) {
+    async login(loginDto: LoginDto):Promise<LogoutDto>{
       try {
         const user = await this.userService.findByEmail(loginDto.email);
         if (!user) {
-          throw new UnauthorizedException('User not found');
+          throw new UnauthorizedException('No account found with that email');
         }
         if (user.lockedUntil && user.lockedUntil > new Date()) {
           const remainingTime = Math.ceil(
@@ -87,7 +96,7 @@ export class AuthService {
         const isPasswordValid = await bcrypt.compare(loginDto.password, user.passwordHash);
         if (!isPasswordValid) {
           await this.handleFailedLogin(user);
-          throw new UnauthorizedException('Invalid credentials');
+          throw new UnauthorizedException('Incorrect password');
         }
         await this.userService.resetFailedAttempts(user.id);
         const accessToken = this.generateAccessToken(user);
@@ -120,25 +129,29 @@ export class AuthService {
     }
   }
   async logout(accessToken: string, refreshToken: string): Promise<void> {
-    await this.blacklistAccessToken(accessToken);
-    if (refreshToken) {
-      const decoded = this.jwtService.decode(refreshToken) as { sub?: number } | null;
-      if (decoded?.sub) {
-        const activeTokens = await this.refreshTokenRepository.query(
-          'SELECT * FROM refresh_tokens WHERE user_id = ?',
-          [decoded.sub]
-        );
-        for (const token of activeTokens) {
-          const isMatch = await bcrypt.compare(refreshToken, token.token_hash).catch(() => false);
-          if (isMatch) {
-            await this.refreshTokenRepository.query(
-              'UPDATE refresh_tokens SET status = 0, is_revoked = 1 WHERE id = ?',
-              [token.id]
-            );
-            break;
+    try {
+      await this.blacklistAccessToken(accessToken);
+      if (refreshToken) {
+        const decoded = this.jwtService.decode(refreshToken) as { sub?: number } | null;
+        if (decoded?.sub) {
+          const activeTokens = await this.refreshTokenRepository.query(
+            'SELECT * FROM refresh_tokens WHERE user_id = ?',
+            [decoded.sub]
+          );
+          for (const token of activeTokens) {
+            const isMatch = await bcrypt.compare(refreshToken, token.token_hash).catch(() => false);
+            if (isMatch) {
+              await this.refreshTokenRepository.query(
+                'UPDATE refresh_tokens SET status = 0, is_revoked = 1 WHERE id = ?',
+                [token.id]
+              );
+              break;
+            }
           }
         }
       }
+    } catch (error) {
+      throw error;
     }
   }
 
@@ -181,21 +194,25 @@ export class AuthService {
   }
 
   private async handleFailedLogin(user: User): Promise<void> {
-    const newFailedAttempts = user.failedAttempts + 1;
+    try {
+      const newFailedAttempts = user.failedAttempts + 1;
 
-    if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
-      const lockedUntil = new Date();
-      lockedUntil.setMinutes(lockedUntil.getMinutes() + LOCK_DURATION_MINUTES);
-      await this.userService.lockAccount(
-        user.id,
-        lockedUntil,
-        newFailedAttempts,
-      );
-    } else {
-      await this.userService.incrementFailedAttempts(
-        user.id,
-        user.failedAttempts,
-      );
+      if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
+        const lockedUntil = new Date();
+        lockedUntil.setMinutes(lockedUntil.getMinutes() + LOCK_DURATION_MINUTES);
+        await this.userService.lockAccount(
+          user.id,
+          lockedUntil,
+          newFailedAttempts,
+        );
+      } else {
+        await this.userService.incrementFailedAttempts(
+          user.id,
+          newFailedAttempts,
+        );
+      }
+    } catch (error) {
+      throw error;
     }
   }
 }

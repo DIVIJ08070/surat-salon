@@ -1,9 +1,9 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe, VersioningType, ClassSerializerInterceptor } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
-import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { AllExceptionsFilter } from './common/filters/global-exception.filter';
+import { SuccessInterceptor } from './common/interceptors/response.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
@@ -27,12 +27,11 @@ async function bootstrap() {
   // Global Interceptors
   app.useGlobalInterceptors(
     new LoggingInterceptor(),
-    new ResponseInterceptor(),
-    new ClassSerializerInterceptor(app.get(Reflector)),
+    new SuccessInterceptor(),
   );
 
   // Global Filters
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Enable CORS
   app.enableCors();

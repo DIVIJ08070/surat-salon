@@ -1,26 +1,31 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
-import { ApiResponse } from '../dto/api-response.dto';
-
-function isApiResponse<T>(obj: unknown): obj is ApiResponse<T> {
-  return typeof obj === 'object' && obj !== null && 'success' in obj && 'timestamp' in obj;
-}
+import {
+  CallHandler,
+  ExecutionContext,
+  Injectable,
+  NestInterceptor,
+} from '@nestjs/common';
+import { Response } from 'express';
+import { map, Observable } from 'rxjs';
+import { ApiSuccessResponse } from '../types/api-response.types';
 
 @Injectable()
-export class ResponseInterceptor<T> implements NestInterceptor<T, ApiResponse<T>> {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T>> {
-    return next.handle().pipe(
-      map(data => {
-        if (isApiResponse<T>(data)) {
-          return data;
-        }
+export class SuccessInterceptor implements NestInterceptor {
+  intercept(
+    ctx: ExecutionContext,
+    next: CallHandler,
+  ): Observable<ApiSuccessResponse> {
+    const response = ctx.switchToHttp().getResponse<Response>();
 
-        return new ApiResponse<T>({
+    return next.handle().pipe(
+      map(
+        (data: object): ApiSuccessResponse => ({
           success: true,
-          data,
-        });
-      }),
+          statusCode: response.statusCode ?? 200,
+          message: 'success',
+          data: data ?? null,
+          timestamp: new Date().toISOString(),
+        }),
+      ),
     );
   }
 }
