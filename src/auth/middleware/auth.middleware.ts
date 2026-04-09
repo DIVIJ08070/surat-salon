@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request, Response, NextFunction } from 'express';
-import { DataSource } from 'typeorm';
+import { DatabaseService } from 'src/database/database.service';
 import { AuthUser } from 'src/auth/jwt.stratergy';
 
 interface JwtPayload {
@@ -19,7 +19,7 @@ interface RequestWithUser extends Request {
 export class AuthMiddleware implements NestMiddleware {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly dataSource: DataSource,
+    private readonly db: DatabaseService,
   ) {}
 
   async use(req: RequestWithUser, _res: Response, next: NextFunction): Promise<void> {
@@ -40,15 +40,14 @@ export class AuthMiddleware implements NestMiddleware {
       throw new UnauthorizedException('Invalid or expired token');
     }
 
-    const result: { id: number }[] = await this.dataSource.query(
-      'SELECT id FROM token_blacklist WHERE jti = ? LIMIT 1',
+    const result = await this.db.query<{ id: number }>(
+      `SELECT id FROM token_blacklist WHERE jti = ? LIMIT 1`,
       [payload.jti],
     );
 
     if (result.length > 0) {
       throw new UnauthorizedException('Token has been revoked');
     }
-
 
     req.user = {
       user_id: payload.sub,

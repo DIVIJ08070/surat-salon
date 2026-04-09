@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { DataSource } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
+import { DatabaseService } from 'src/database/database.service';
 
 @Injectable()
 export class CronService {
   private readonly logger = new Logger(CronService.name);
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // ─── DAILY REVENUE SUMMARY — runs every day at 11:30 PM ──────────────────────
   @Cron('30 23 * * *', { name: 'daily-revenue-summary', timeZone: 'Asia/Kolkata' })
@@ -21,7 +21,7 @@ export class CronService {
         no_shows: string;
         cancellations: string;
         total_revenue: string;
-      }[] = await this.dataSource.query(
+      }[] = await this.db.query(
         `SELECT
            COUNT(CASE WHEN appointment_status = 'completed'  THEN 1 END) AS completed,
            COUNT(CASE WHEN appointment_status = 'no_show'    THEN 1 END) AS no_shows,
@@ -36,7 +36,7 @@ export class CronService {
 
       // Top earning service of the day
       const topServiceRows: { service_name: string; revenue: string }[] =
-        await this.dataSource.query(
+        await this.db.query(
           `SELECT s.name AS service_name, SUM(aps.price_at_booking) AS revenue
            FROM appointment_services aps
            JOIN appointments a ON a.id = aps.appointment_id
@@ -51,7 +51,7 @@ export class CronService {
 
       // Top performing stylist of the day
       const topStylistRows: { stylist_name: string; appointments: string }[] =
-        await this.dataSource.query(
+        await this.db.query(
           `SELECT st.name AS stylist_name, COUNT(a.id) AS appointments
            FROM appointments a
            JOIN stylists st ON st.id = a.stylist_id

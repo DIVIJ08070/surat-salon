@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DatabaseService } from 'src/database/database.service';
 
 @Injectable()
 export class ReportService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // ─── 1. DAILY BUSINESS SUMMARY ───────────────────────────────────────────────
   // Completed appointments, revenue, no-shows, peak hour for a given date
 
   async dailySummary(date: string): Promise<object> {
-    const [summary] = await this.dataSource.query(
+    const [summary] = await this.db.query(
       `SELECT
          COUNT(CASE WHEN appointment_status = 'completed' THEN 1 END)  AS completed_appointments,
          COUNT(CASE WHEN appointment_status = 'no_show'   THEN 1 END)  AS no_shows,
@@ -22,7 +22,7 @@ export class ReportService {
     );
 
     // Peak hour — the start_time that had the most appointments
-    const peakRows: { peak_hour: string; count: string }[] = await this.dataSource.query(
+    const peakRows: { peak_hour: string; count: string }[] = await this.db.query(
       `SELECT TIME_FORMAT(start_time, '%H:00') AS peak_hour, COUNT(*) AS count
        FROM appointments
        WHERE appointment_date = ? AND status = 1
@@ -44,7 +44,7 @@ export class ReportService {
   // Bookings count, revenue, avg duration — ranked using RANK() window function
 
   async servicePerformance(): Promise<object[]> {
-    return this.dataSource.query(
+    return this.db.query(
       `SELECT
          s.id,
          s.service_code,
@@ -68,7 +68,7 @@ export class ReportService {
   // Hours worked, appointments handled, revenue, commission calculated in SQL
 
   async stylistPerformance(): Promise<object[]> {
-    return this.dataSource.query(
+    return this.db.query(
       `SELECT
          st.id,
          st.name                                                    AS stylist_name,
@@ -99,7 +99,7 @@ export class ReportService {
   // Visit frequency, total spend, favourite service (via subquery), CASE WHEN tier
 
   async customerVisitAnalysis(): Promise<object[]> {
-    return this.dataSource.query(
+    return this.db.query(
       `SELECT
          c.id,
          c.customer_code,

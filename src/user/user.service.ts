@@ -1,58 +1,61 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { DatabaseService } from 'src/database/database.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from '../entities';
-import { Repository } from 'typeorm';
+import { IUser } from './interfaces/user.interface';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService {
-  constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>
-  ) {}
-  async create(createUserDto: CreateUserDto): Promise<User> {
-    const saltOrRounds = 10;
-    const passwordHash = await bcrypt.hash(createUserDto.password, saltOrRounds);
+  constructor(private readonly db: DatabaseService) {}
 
-    const user = this.userRepository.create({
-      email: createUserDto.email,
-      passwordHash,
-      role: createUserDto.role,
-    });
-    return this.userRepository.save(user);
+  async create(dto: CreateUserDto): Promise<IUser> {
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    await this.db.execute(
+      `INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)`,
+      [dto.email, passwordHash, dto.role],
+    );
+
+    const rows = await this.db.query<IUser>(
+      `SELECT * FROM users WHERE email = ? LIMIT 1`,
+      [dto.email],
+    );
+    return rows[0];
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({
-      where: {
-        email: email,
-        status: 1
-      }
-    });
+  async findByEmail(email: string): Promise<IUser | null> {
+    const rows = await this.db.query<IUser>(
+      `SELECT * FROM users WHERE email = ? AND status = 1 LIMIT 1`,
+      [email],
+    );
+    return rows[0] ?? null;
   }
-  async findById(id: number): Promise<User | null> {
-    return this.userRepository.query(`SELECT * FROM users WHERE id = ? AND status = 1`, [id]);
+
+  async findById(id: number): Promise<IUser | null> {
+    const rows = await this.db.query<IUser>(
+      `SELECT * FROM users WHERE id = ? AND status = 1 LIMIT 1`,
+      [id],
+    );
+    return rows[0] ?? null;
   }
 
   async lockAccount(id: number, lockedUntil: Date, failedAttempts: number): Promise<void> {
-      await this.userRepository.query(
-        'UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?',
+    await this.db.execute(
+      `UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?`,
       [failedAttempts, lockedUntil, id],
     );
   }
 
   async incrementFailedAttempts(id: number, failedAttempts: number): Promise<void> {
-    await this.userRepository.query(
-      'UPDATE users SET failed_attempts = ? WHERE id = ?',
+    await this.db.execute(
+      `UPDATE users SET failed_attempts = ? WHERE id = ?`,
       [failedAttempts, id],
     );
   }
 
   async resetFailedAttempts(id: number): Promise<void> {
-    await this.userRepository.query(
-      'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?',
+    await this.db.execute(
+      `UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?`,
       [id],
     );
   }
