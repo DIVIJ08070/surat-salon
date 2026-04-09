@@ -16,6 +16,11 @@ import { ServiceModule } from './service/service.module';
 import { StylistModule } from './stylist/stylist.module';
 import { CustomerModule } from './customer/customer.module';
 import { StylistLeaveModule } from './stylist-leave/stylist-leave.module';
+import { TimeSlotModule } from './time-slot/time-slot.module';
+import { AppointmentModule } from './appointment/appointment.module';
+import { BillModule } from './bill/bill.module';
+import { ReportModule } from './report/report.module';
+import { CronModule } from './cron/cron.module';
 
 @Module({
   imports: [
@@ -47,6 +52,11 @@ import { StylistLeaveModule } from './stylist-leave/stylist-leave.module';
     StylistModule,
     CustomerModule,
     StylistLeaveModule,
+    TimeSlotModule,
+    AppointmentModule,
+    BillModule,
+    ReportModule,
+    CronModule,
   ],
   controllers: [AppController],
   providers: [

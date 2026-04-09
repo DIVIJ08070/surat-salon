@@ -9,6 +9,19 @@ import { StylistLeave } from 'src/entities';
 import { CreateLeaveDto } from './dto/create-leave.dto';
 import { LeaveStatus, SlotStatus, BlockReason } from 'src/common/enums';
 
+// ─── Row interface returned by findOne ────────────────────────────────────────
+interface LeaveRow {
+  id: number;
+  stylist_id: number;
+  leave_date: string;
+  leave_start: string | null;
+  leave_end: string | null;
+  leave_status: LeaveStatus;
+  reason: string | null;
+  stylist_name: string;
+  status: number;
+}
+
 @Injectable()
 export class StylistLeaveService {
   constructor(
@@ -78,8 +91,8 @@ export class StylistLeaveService {
 
   // ─── READ ONE ─────────────────────────────────────────────────────────────────
 
-  async findOne(id: number): Promise<object> {
-    const rows: object[] = await this.leaveRepository.query(
+  async findOne(id: number): Promise<LeaveRow> {
+    const rows: LeaveRow[] = await this.leaveRepository.query(
       `SELECT sl.*, s.name AS stylist_name
        FROM stylist_leaves sl
        JOIN stylists s ON s.id = sl.stylist_id
@@ -98,42 +111,30 @@ export class StylistLeaveService {
   // On approval → block existing time slots for that day with block_reason = 'leave'
 
   async approve(id: number): Promise<{ message: string }> {
-    const leave = await this.findOne(id) as Record<string, unknown>;
+    const leave = await this.findOne(id);
 
-    if (leave['leave_status'] !== LeaveStatus.PENDING) {
+    if (leave.leave_status !== LeaveStatus.PENDING) {
       throw new BadRequestException(`Only PENDING leave requests can be approved`);
     }
 
-    // Update leave status to APPROVED
     await this.leaveRepository.query(
       `UPDATE stylist_leaves SET leave_status = 'approved' WHERE id = ?`,
       [id],
     );
 
-    // Update stylist status to ON_LEAVE
     await this.dataSource.query(
       `UPDATE stylists SET stylist_status = 'on_leave' WHERE id = ?`,
-      [leave['stylist_id']],
+      [leave.stylist_id],
     );
 
-    // Block existing time slots for this stylist on the leave date
-    // If partial leave (leaveStart + leaveEnd set), block only those slots
-    // If full-day leave, block all slots for that date
-    if (leave['leave_start'] && leave['leave_end']) {
+    if (leave.leave_start && leave.leave_end) {
       await this.dataSource.query(
         `UPDATE time_slots
          SET slot_status = ?, block_reason = ?
          WHERE stylist_id = ? AND slot_date = ?
            AND start_time >= ? AND end_time <= ?
            AND slot_status = 'available' AND status = 1`,
-        [
-          SlotStatus.BOOKED,
-          BlockReason.LEAVE,
-          leave['stylist_id'],
-          leave['leave_date'],
-          leave['leave_start'],
-          leave['leave_end'],
-        ],
+        [SlotStatus.BOOKED, BlockReason.LEAVE, leave.stylist_id, leave.leave_date, leave.leave_start, leave.leave_end],
       );
     } else {
       await this.dataSource.query(
@@ -141,7 +142,7 @@ export class StylistLeaveService {
          SET slot_status = ?, block_reason = ?
          WHERE stylist_id = ? AND slot_date = ?
            AND slot_status = 'available' AND status = 1`,
-        [SlotStatus.BOOKED, BlockReason.LEAVE, leave['stylist_id'], leave['leave_date']],
+        [SlotStatus.BOOKED, BlockReason.LEAVE, leave.stylist_id, leave.leave_date],
       );
     }
 
@@ -152,9 +153,9 @@ export class StylistLeaveService {
   // On rejection → release any slots blocked for 'leave' on that date
 
   async reject(id: number): Promise<{ message: string }> {
-    const leave = await this.findOne(id) as Record<string, unknown>;
+    const leave = await this.findOne(id);
 
-    if (leave['leave_status'] !== LeaveStatus.PENDING) {
+    if (leave.leave_status !== LeaveStatus.PENDING) {
       throw new BadRequestException(`Only PENDING leave requests can be rejected`);
     }
 
@@ -169,9 +170,9 @@ export class StylistLeaveService {
   // ─── CANCEL LEAVE (by stylist — only PENDING) ─────────────────────────────────
 
   async cancel(id: number): Promise<{ message: string }> {
-    const leave = await this.findOne(id) as Record<string, unknown>;
+    const leave = await this.findOne(id);
 
-    if (leave['leave_status'] !== LeaveStatus.PENDING) {
+    if (leave.leave_status !== LeaveStatus.PENDING) {
       throw new BadRequestException(`Only PENDING leave requests can be cancelled`);
     }
 
@@ -187,31 +188,28 @@ export class StylistLeaveService {
   // Admin revokes an already-approved leave → releases leave-blocked slots
 
   async revoke(id: number): Promise<{ message: string }> {
-    const leave = await this.findOne(id) as Record<string, unknown>;
+    const leave = await this.findOne(id);
 
-    if (leave['leave_status'] !== LeaveStatus.APPROVED) {
+    if (leave.leave_status !== LeaveStatus.APPROVED) {
       throw new BadRequestException(`Only APPROVED leave requests can be revoked`);
     }
 
-    // Update leave to rejected
     await this.leaveRepository.query(
       `UPDATE stylist_leaves SET leave_status = 'rejected' WHERE id = ?`,
       [id],
     );
 
-    // Re-activate stylist status
     await this.dataSource.query(
       `UPDATE stylists SET stylist_status = 'active' WHERE id = ?`,
-      [leave['stylist_id']],
+      [leave.stylist_id],
     );
 
-    // Release ONLY leave-blocked slots (never touch appointment-blocked slots)
     await this.dataSource.query(
       `UPDATE time_slots
        SET slot_status = 'available', block_reason = NULL
        WHERE stylist_id = ? AND slot_date = ?
          AND block_reason = 'leave' AND status = 1`,
-      [leave['stylist_id'], leave['leave_date']],
+      [leave.stylist_id, leave.leave_date],
     );
 
     return { message: 'Leave revoked and time slots released' };

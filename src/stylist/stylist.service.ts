@@ -23,7 +23,7 @@ export class StylistService {
     return role === UserRole.ADMIN ? `${base}, commission_rate` : base;
   }
 
-  // ─── CREATE ──────────────────────────────────────────────────────────────────
+  // ─── CREATE 
 
   async create(dto: CreateStylistDto, role: UserRole): Promise<object> {
     const commissionRate = dto.commissionRate ?? 0.00;
@@ -42,7 +42,7 @@ export class StylistService {
     return rows[0];
   }
 
-  // ─── READ ALL ─────────────────────────────────────────────────────────────────
+  // ─── READ ALL
 
   async findAll(
     role: UserRole,
@@ -87,7 +87,7 @@ export class StylistService {
     };
   }
 
-  // ─── READ ONE ─────────────────────────────────────────────────────────────────
+  // ─── READ ONE 
 
   async findOne(id: number, role: UserRole): Promise<object> {
     const cols = this.selectColumns(role);
@@ -103,7 +103,7 @@ export class StylistService {
     return rows[0];
   }
 
-  // ─── UPDATE ───────────────────────────────────────────────────────────────────
+  // ─── UPDATE
 
   async update(id: number, dto: UpdateStylistDto, role: UserRole): Promise<object> {
     await this.findOne(id, role); // throws 404 if not found
@@ -153,7 +153,7 @@ export class StylistService {
     return this.findOne(id, role);
   }
 
-  // ─── SOFT DELETE ──────────────────────────────────────────────────────────────
+  // ─── SOFT DELETE 
 
   async remove(id: number): Promise<{ message: string }> {
     await this.findOne(id, UserRole.ADMIN); // throws 404 if not found
@@ -166,7 +166,7 @@ export class StylistService {
     return { message: 'Stylist deleted successfully' };
   }
 
-  // ─── ASSIGN SERVICES TO STYLIST ───────────────────────────────────────────────
+  // ─── ASSIGN SERVICES TO STYLIST 
 
   async assignServices(stylistId: number, dto: AssignServicesDto): Promise<{ message: string }> {
     // Verify stylist exists
@@ -198,7 +198,7 @@ export class StylistService {
     return { message: `${dto.serviceIds.length} service(s) assigned to stylist successfully` };
   }
 
-  // ─── GET SERVICES OF A STYLIST ────────────────────────────────────────────────
+  // ─── GET SERVICES OF A STYLIST
 
   async getStylistServices(stylistId: number): Promise<object[]> {
     // Verify stylist exists
@@ -215,7 +215,7 @@ export class StylistService {
     );
   }
 
-  // ─── REMOVE A SERVICE FROM STYLIST ────────────────────────────────────────────
+  // ─── REMOVE A SERVICE FROM STYLIST 
 
   async removeService(stylistId: number, serviceId: number): Promise<{ message: string }> {
     // Verify stylist exists

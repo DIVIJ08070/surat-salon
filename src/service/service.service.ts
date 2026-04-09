@@ -17,8 +17,7 @@ export class ServiceService {
     private readonly serviceRepository: Repository<Service>,
   ) {}
 
-  // ─── AUTO-GENERATE SERVICE CODE ───────────────────────────────────────────────
-  // Format: SRV-001, SRV-002, ... (sequential, as per spec)
+
   private async generateServiceCode(): Promise<string> {
     const rows: { service_code: string }[] = await this.serviceRepository.query(
       `SELECT service_code FROM services ORDER BY id DESC LIMIT 1`,
@@ -28,14 +27,14 @@ export class ServiceService {
       return 'SRV-001';
     }
 
-    // e.g. "SRV-007" → split('-') → ["SRV", "007"] → 7
+ 
     const lastCode = rows[0].service_code;
     const num = parseInt(lastCode.split('-')[1], 10);
     const next = num + 1;
-    return `SRV-${String(next).padStart(3, '0')}`; // → "SRV-008"
+    return `SRV-${String(next).padStart(3, '0')}`; 
   }
 
-  // ─── CREATE ──────────────────────────────────────────────────────────────────
+
 
   async create(dto: CreateServiceDto): Promise<Service[]> {
     const serviceCode = await this.generateServiceCode();
@@ -54,7 +53,7 @@ export class ServiceService {
     );
   }
 
-  // ─── READ ALL ─────────────────────────────────────────────────────────────────
+
 
   async findAll(
     category?: ServiceCategory,
@@ -97,7 +96,7 @@ export class ServiceService {
     };
   }
 
-  // ─── READ ONE ─────────────────────────────────────────────────────────────────
+
 
   async findOne(id: number): Promise<Service> {
     const rows: Service[] = await this.serviceRepository.query(
@@ -112,10 +111,10 @@ export class ServiceService {
     return rows[0];
   }
 
-  // ─── UPDATE ───────────────────────────────────────────────────────────────────
+
 
   async update(id: number, dto: UpdateServiceDto): Promise<Service[]> {
-    // Ensure service exists
+  
     await this.findOne(id);
 
     const fields: string[] = [];
@@ -169,10 +168,9 @@ export class ServiceService {
     );
   }
 
-  // ─── TOGGLE AVAILABILITY ──────────────────────────────────────────────────────
 
   async toggleAvailability(id: number): Promise<Service[]> {
-    await this.findOne(id); // throws 404 if not found
+    await this.findOne(id); 
 
     await this.serviceRepository.query(
       `UPDATE services SET is_available = IF(is_available = 1, 0, 1) WHERE id = ?`,
@@ -185,10 +183,10 @@ export class ServiceService {
     );
   }
 
-  // ─── SOFT DELETE ──────────────────────────────────────────────────────────────
+
 
   async remove(id: number): Promise<{ message: string }> {
-    await this.findOne(id); // throws 404 if not found
+    await this.findOne(id);
 
     await this.serviceRepository.query(
       `UPDATE services SET status = 127 WHERE id = ?`,

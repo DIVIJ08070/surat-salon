@@ -15,13 +15,14 @@ import { UpdateStylistDto } from './dto/update-stylist.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { User } from 'src/common/decorators/user.decorator';
 import { UserRole, StylistSpecialisation, StylistStatus } from 'src/common/enums';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import type { AuthUser } from 'src/auth/jwt.stratergy';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { AssignServicesDto } from './dto/assign-services.dto';
 
 @ApiTags('Stylists')
 @Controller('stylists')
+@ApiBearerAuth()
 export class StylistController {
   constructor(private readonly stylistService: StylistService) {}
 

@@ -14,11 +14,12 @@ import { CreateLeaveDto } from './dto/create-leave.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { User } from 'src/common/decorators/user.decorator';
 import { UserRole } from 'src/common/enums';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import type { AuthUser } from 'src/auth/jwt.stratergy';
 
 @ApiTags('Stylist Leaves')
 @Controller('stylist-leaves')
+@ApiBearerAuth()
 export class StylistLeaveController {
   constructor(private readonly leaveService: StylistLeaveService) {}
 

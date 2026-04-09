@@ -16,10 +16,11 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UserRole, ServiceCategory, Gender } from 'src/common/enums';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @ApiTags('Services')
+@ApiBearerAuth()
 @Controller('services')
 export class ServiceController {
   constructor(private readonly serviceService: ServiceService) {}

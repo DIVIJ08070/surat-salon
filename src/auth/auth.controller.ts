@@ -4,8 +4,10 @@ import { LoginDto } from './dto/Login.dto';
 import { CreateUserDto } from 'src/user/dto/create-user.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('auth')
+@ApiBearerAuth()
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 

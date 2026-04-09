@@ -37,8 +37,8 @@ export class UserService {
   }
 
   async lockAccount(id: number, lockedUntil: Date, failedAttempts: number): Promise<void> {
-    await this.userRepository.query(
-      'UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?',
+      await this.userRepository.query(
+        'UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?',
       [failedAttempts, lockedUntil, id],
     );
   }
