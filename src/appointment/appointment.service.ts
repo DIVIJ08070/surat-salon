@@ -8,6 +8,29 @@ import {
 import { DatabaseService } from 'src/database/database.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { AppointmentStatus, AppointmentServiceStatus, SlotStatus, UserRole } from 'src/common/enums';
+import {
+  GENERATE_APPOINTMENT_NUMBER,
+  CHECK_APPOINTMENT_CUSTOMER_EXISTS,
+  CHECK_APPOINTMENT_STYLIST_EXISTS,
+  CHECK_STYLIST_ON_LEAVE,
+  FIND_SERVICES_FOR_BOOKING,
+  CHECK_STYLIST_CAN_DO_SERVICES,
+  FIND_AVAILABLE_SLOTS_FOR_BOOKING,
+  INSERT_APPOINTMENT,
+  FIND_APPOINTMENT_ID_BY_NUMBER,
+  INSERT_APPOINTMENT_SERVICE,
+  BLOCK_TIME_SLOTS,
+  FIND_ALL_APPOINTMENTS,
+  FIND_APPOINTMENT_BY_ID,
+  FIND_APPOINTMENT_SERVICES,
+  FIND_STYLIST_DAILY_SCHEDULE,
+  COMPLETE_APPOINTMENT_SERVICE,
+  COUNT_PENDING_APPOINTMENT_SERVICES,
+  COMPLETE_APPOINTMENT,
+  RELEASE_APPOINTMENT_SLOTS,
+  CANCEL_APPOINTMENT,
+  MARK_APPOINTMENT_NO_SHOW,
+} from './appointment.query';
 
 // ─── Typed row interfaces ────────────────────────────────────────────────────
 
@@ -31,12 +54,9 @@ interface AppointmentRow {
   appointment_status: AppointmentStatus;
   notes: string | null;
   created_at: string;
-  updated_at: string;
-  customer_id: number;
   customer_name: string;
   customer_code: string;
   customer_phone: string;
-  stylist_id: number;
   stylist_name: string;
 }
 
@@ -65,10 +85,7 @@ export class AppointmentService {
 
   private async generateAppointmentNumber(conn: import('mysql2/promise').PoolConnection): Promise<string> {
     const year = new Date().getFullYear();
-    const [rows] = await conn.execute(
-      `SELECT MAX(CAST(SUBSTRING_INDEX(appointment_number, '-', -1) AS UNSIGNED)) AS max_num
-       FROM appointments WHERE appointment_number REGEXP '^APT-${year}-[0-9]+$'`,
-    ) as [{ max_num: number | null }[], unknown];
+    const [rows] = await conn.execute(GENERATE_APPOINTMENT_NUMBER(year)) as [{ max_num: number | null }[], unknown];
     const maxNum = Number(rows[0]?.max_num ?? 0);
     return `APT-${year}-${String(maxNum + 1).padStart(3, '0')}`;
   }
@@ -85,25 +102,18 @@ export class AppointmentService {
     await conn.beginTransaction();
 
     try {
-      const [customerRows] = await conn.execute(
-        `SELECT id FROM customers WHERE id = ? AND status = 1`, [dto.customerId],
-      ) as [{ id: number }[], unknown];
+      const [customerRows] = await conn.execute(CHECK_APPOINTMENT_CUSTOMER_EXISTS, [dto.customerId]) as [{ id: number }[], unknown];
       if (!customerRows.length) throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
 
-      const [stylistRows] = await conn.execute(
-        `SELECT id FROM stylists WHERE id = ? AND status = 1`, [dto.stylistId],
-      ) as [{ id: number }[], unknown];
+      const [stylistRows] = await conn.execute(CHECK_APPOINTMENT_STYLIST_EXISTS, [dto.stylistId]) as [{ id: number }[], unknown];
       if (!stylistRows.length) throw new NotFoundException(`Stylist with id ${dto.stylistId} not found`);
 
-      const [leaveRows] = await conn.execute(
-        `SELECT id FROM stylist_leaves WHERE stylist_id = ? AND leave_date = ? AND leave_status = 'approved' AND status = 1`,
-        [dto.stylistId, dto.appointmentDate],
-      ) as [{ id: number }[], unknown];
+      const [leaveRows] = await conn.execute(CHECK_STYLIST_ON_LEAVE, [dto.stylistId, dto.appointmentDate]) as [{ id: number }[], unknown];
       if (leaveRows.length) throw new UnprocessableEntityException(`Stylist is on approved leave on ${dto.appointmentDate}`);
 
       const placeholders = dto.serviceIds.map(() => '?').join(', ');
       const [serviceRows] = await conn.execute(
-        `SELECT s.id, s.name, s.price, s.duration_minutes, s.is_available FROM services s WHERE s.id IN (${placeholders}) AND s.status = 1`,
+        FIND_SERVICES_FOR_BOOKING(placeholders),
         dto.serviceIds,
       ) as [{ id: number; name: string; price: number; duration_minutes: number; is_available: number }[], unknown];
 
@@ -111,7 +121,7 @@ export class AppointmentService {
       if (serviceRows.some(s => !s.is_available)) throw new BadRequestException('One or more services are currently unavailable');
 
       const [stylistServiceRows] = await conn.execute(
-        `SELECT service_id FROM stylist_services WHERE stylist_id = ? AND service_id IN (${placeholders}) AND status = 1`,
+        CHECK_STYLIST_CAN_DO_SERVICES(placeholders),
         [dto.stylistId, ...dto.serviceIds],
       ) as [{ service_id: number }[], unknown];
       if (stylistServiceRows.length !== dto.serviceIds.length) {
@@ -130,9 +140,7 @@ export class AppointmentService {
 
       const slotPlaceholders = expectedStartTimes.map(() => '?').join(', ');
       const [availableSlots] = await conn.execute(
-        `SELECT id, start_time, slot_status FROM time_slots
-         WHERE stylist_id = ? AND slot_date = ? AND start_time IN (${slotPlaceholders})
-           AND slot_status = 'available' AND status = 1 FOR UPDATE`,
+        FIND_AVAILABLE_SLOTS_FOR_BOOKING(slotPlaceholders),
         [dto.stylistId, dto.appointmentDate, ...expectedStartTimes],
       ) as [{ id: number; start_time: string }[], unknown];
 
@@ -143,27 +151,28 @@ export class AppointmentService {
       const slotIds = availableSlots.map(s => s.id);
       const appointmentNumber = await this.generateAppointmentNumber(conn);
 
-      await conn.execute(
-        `INSERT INTO appointments (appointment_number, customer_id, stylist_id, appointment_date, start_time, end_time, total_duration_minutes, total_amount, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [appointmentNumber, dto.customerId, dto.stylistId, dto.appointmentDate, dto.startTime, endTime, totalDuration, totalAmount, dto.notes ?? null],
-      );
+      await conn.execute(INSERT_APPOINTMENT, [
+        appointmentNumber,
+        dto.customerId,
+        dto.stylistId,
+        dto.appointmentDate,
+        dto.startTime,
+        endTime,
+        totalDuration,
+        totalAmount,
+        dto.notes ?? null,
+      ]);
 
-      const [newApt] = await conn.execute(
-        `SELECT id FROM appointments WHERE appointment_number = ?`, [appointmentNumber],
-      ) as [{ id: number }[], unknown];
+      const [newApt] = await conn.execute(FIND_APPOINTMENT_ID_BY_NUMBER, [appointmentNumber]) as [{ id: number }[], unknown];
       const appointmentId = newApt[0].id;
 
       for (const svc of serviceRows) {
-        await conn.execute(
-          `INSERT INTO appointment_services (appointment_id, service_id, price_at_booking, duration_minutes) VALUES (?, ?, ?, ?)`,
-          [appointmentId, svc.id, svc.price, svc.duration_minutes],
-        );
+        await conn.execute(INSERT_APPOINTMENT_SERVICE, [appointmentId, svc.id, svc.price, svc.duration_minutes]);
       }
 
       const slotIdPlaceholders = slotIds.map(() => '?').join(', ');
       await conn.execute(
-        `UPDATE time_slots SET slot_status = ?, block_reason = ?, appointment_id = ? WHERE id IN (${slotIdPlaceholders})`,
+        BLOCK_TIME_SLOTS(slotIdPlaceholders),
         [SlotStatus.BOOKED, 'appointment', appointmentId, ...slotIds],
       );
 
@@ -220,17 +229,7 @@ export class AppointmentService {
     const total = parseInt(countRows[0].total, 10);
 
     const data = await this.db.query<AppointmentRow>(
-      `SELECT a.id, a.appointment_number, a.appointment_date, a.start_time, a.end_time,
-              a.total_duration_minutes, a.total_amount, a.appointment_status, a.notes,
-              a.created_at,
-              c.id AS customer_id, c.name AS customer_name, c.customer_code, c.phone AS customer_phone,
-              st.id AS stylist_id, st.name AS stylist_name
-       FROM appointments a
-       JOIN customers c ON c.id = a.customer_id
-       JOIN stylists st ON st.id = a.stylist_id
-       ${whereSql}
-       ORDER BY a.appointment_date DESC, a.start_time DESC
-       LIMIT ? OFFSET ?`,
+      FIND_ALL_APPOINTMENTS(whereSql),
       [...params, limit, offset],
     );
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
@@ -239,27 +238,10 @@ export class AppointmentService {
   // ─── GET ONE APPOINTMENT (with services) ─────────────────────────────────────
 
   async findOne(id: number, _role?: UserRole): Promise<AppointmentDetail> {
-    const rows = await this.db.query<AppointmentRow>(
-      `SELECT a.id, a.appointment_number, a.appointment_date, a.start_time, a.end_time,
-              a.total_duration_minutes, a.total_amount, a.appointment_status, a.notes,
-              a.created_at, a.updated_at,
-              c.id AS customer_id, c.name AS customer_name, c.customer_code, c.phone AS customer_phone,
-              st.id AS stylist_id, st.name AS stylist_name
-       FROM appointments a
-       JOIN customers c ON c.id = a.customer_id
-       JOIN stylists st ON st.id = a.stylist_id
-       WHERE a.id = ? AND a.status = 1`,
-      [id],
-    );
+    const rows = await this.db.query<AppointmentRow>(FIND_APPOINTMENT_BY_ID, [id]);
     if (!rows.length) throw new NotFoundException(`Appointment with id ${id} not found`);
 
-    const services = await this.db.query<AppointmentServiceRow>(
-      `SELECT aps.id, s.name AS service_name, s.service_code,
-              aps.price_at_booking, aps.duration_minutes, aps.appointment_service_status
-       FROM appointment_services aps JOIN services s ON s.id = aps.service_id
-       WHERE aps.appointment_id = ? AND aps.status = 1`,
-      [id],
-    );
+    const services = await this.db.query<AppointmentServiceRow>(FIND_APPOINTMENT_SERVICES, [id]);
     return { ...rows[0], services };
   }
 
@@ -267,39 +249,21 @@ export class AppointmentService {
   // Stylists can only see their own schedule
 
   async getDailySchedule(stylistId: number, date: string): Promise<AppointmentRow[]> {
-    return this.db.query<AppointmentRow>(
-      `SELECT a.id, a.appointment_number, a.appointment_date, a.start_time, a.end_time,
-              a.total_duration_minutes, a.total_amount, a.appointment_status,
-              c.name AS customer_name, c.phone AS customer_phone,
-              GROUP_CONCAT(s.name ORDER BY s.name SEPARATOR ', ') AS services
-       FROM appointments a
-       JOIN customers c ON c.id = a.customer_id
-       JOIN appointment_services aps ON aps.appointment_id = a.id AND aps.status = 1
-       JOIN services s ON s.id = aps.service_id
-       WHERE a.stylist_id = ? AND a.appointment_date = ? AND a.status = 1
-       GROUP BY a.id ORDER BY a.start_time ASC`,
-      [stylistId, date],
-    );
+    return this.db.query<AppointmentRow>(FIND_STYLIST_DAILY_SCHEDULE, [stylistId, date]);
   }
 
   // ─── MARK SERVICE AS COMPLETED ───────────────────────────────────────────────
 
   async completeService(appointmentId: number, serviceId: number): Promise<{ message: string }> {
     await this.findOne(appointmentId);
-    await this.db.execute(
-      `UPDATE appointment_services SET appointment_service_status = ? WHERE appointment_id = ? AND service_id = ? AND status = 1`,
-      [AppointmentServiceStatus.COMPLETED, appointmentId, serviceId],
-    );
-    const pendingRows = await this.db.query<{ cnt: string }>(
-      `SELECT COUNT(*) AS cnt FROM appointment_services WHERE appointment_id = ? AND appointment_service_status = 'pending' AND status = 1`,
-      [appointmentId],
-    );
+    await this.db.execute(COMPLETE_APPOINTMENT_SERVICE, [AppointmentServiceStatus.COMPLETED, appointmentId, serviceId]);
+    const pendingRows = await this.db.query<{ cnt: string }>(COUNT_PENDING_APPOINTMENT_SERVICES, [appointmentId]);
     if (parseInt(pendingRows[0].cnt, 10) === 0) {
       const conn = await this.db.getConnection();
       await conn.beginTransaction();
       try {
-        await conn.execute(`UPDATE appointments SET appointment_status = ? WHERE id = ?`, [AppointmentStatus.COMPLETED, appointmentId]);
-        await conn.execute(`UPDATE time_slots SET slot_status = 'available', block_reason = NULL, appointment_id = NULL WHERE appointment_id = ? AND status = 1`, [appointmentId]);
+        await conn.execute(COMPLETE_APPOINTMENT, [AppointmentStatus.COMPLETED, appointmentId]);
+        await conn.execute(RELEASE_APPOINTMENT_SLOTS, [appointmentId]);
         await conn.commit();
       } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
       return { message: 'Service marked complete. All services done — appointment completed and slots released.' };
@@ -317,8 +281,8 @@ export class AppointmentService {
     const conn = await this.db.getConnection();
     await conn.beginTransaction();
     try {
-      await conn.execute(`UPDATE appointments SET appointment_status = ? WHERE id = ?`, [AppointmentStatus.CANCELLED, id]);
-      await conn.execute(`UPDATE time_slots SET slot_status = 'available', block_reason = NULL, appointment_id = NULL WHERE appointment_id = ? AND status = 1`, [id]);
+      await conn.execute(CANCEL_APPOINTMENT, [AppointmentStatus.CANCELLED, id]);
+      await conn.execute(RELEASE_APPOINTMENT_SLOTS, [id]);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
     return { message: 'Appointment cancelled and time slots released' };
@@ -329,7 +293,7 @@ export class AppointmentService {
   async markNoShow(id: number): Promise<{ message: string }> {
     const apt = await this.findOne(id);
     if (apt.appointment_status !== AppointmentStatus.SCHEDULED) throw new BadRequestException('Only SCHEDULED appointments can be marked as no-show');
-    await this.db.execute(`UPDATE appointments SET appointment_status = ? WHERE id = ?`, [AppointmentStatus.NO_SHOW, id]);
+    await this.db.execute(MARK_APPOINTMENT_NO_SHOW, [AppointmentStatus.NO_SHOW, id]);
     return { message: 'Appointment marked as no-show' };
   }
 }

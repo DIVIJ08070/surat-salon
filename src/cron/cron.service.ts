@@ -1,27 +1,65 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { DatabaseService } from 'src/database/database.service';
+import { TimeSlotService } from 'src/time-slot/time-slot.service';
 
 @Injectable()
 export class CronService {
   private readonly logger = new Logger(CronService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly timeSlotService: TimeSlotService,
+  ) {}
+
+  // ─── AUTO-GENERATE SLOTS FOR NEXT MONTH ──────────────────────────────────────
+  // Runs every day at midnight to check if it's time to generate slots for next month
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, { name: 'auto-generate-slots', timeZone: 'Asia/Kolkata' })
+  async autoGenerateNextMonthSlots(): Promise<void> {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-indexed
+
+    // Last day of current month
+    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    const dayOfMonth = today.getDate();
+    const daysInMonth = lastDayOfMonth.getDate();
+    const daysLeft = daysInMonth - dayOfMonth;
+
+    // Trigger only if there are 7 or fewer days left in the month
+    if (daysLeft <= 7) {
+      const nextMonthStart = new Date(currentYear, currentMonth + 1, 1);
+      const nextMonthEnd = new Date(currentYear, currentMonth + 2, 0);
+
+      const fromDate = nextMonthStart.toISOString().slice(0, 10);
+      const toDate = nextMonthEnd.toISOString().slice(0, 10);
+
+      this.logger.log(`[CRON] Detected ${daysLeft} days left in the month. Generating slots for next month: ${fromDate} to ${toDate}...`);
+
+      try {
+        const result = await this.timeSlotService.generateBulk({
+          fromDate,
+          toDate,
+          slotDurationMinutes: 30,
+        });
+        this.logger.log(`[CRON] Successfully generated ${result.created} slots for ${result.stylistsProcessed} stylists.`);
+      } catch (err: any) {
+        this.logger.error(`[CRON] Bulk generation failed: ${err.message}`, err.stack);
+      }
+    } else {
+      this.logger.log(`[CRON] Checked slot generation: ${daysLeft} days left in the month. No action needed.`);
+    }
+  }
 
   // ─── DAILY REVENUE SUMMARY — runs every day at 11:30 PM ──────────────────────
   @Cron('30 23 * * *', { name: 'daily-revenue-summary', timeZone: 'Asia/Kolkata' })
   async runDailyRevenueSummary(): Promise<void> {
-    const today = new Date().toISOString().slice(0, 10);
-    this.logger.log(`[CRON] Running daily revenue summary for ${today}...`);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    this.logger.log(`[CRON] Running daily revenue summary for ${todayStr}...`);
 
     try {
       // Totals for today
-      const [summary]: {
-        completed: string;
-        no_shows: string;
-        cancellations: string;
-        total_revenue: string;
-      }[] = await this.db.query(
+      const [summary]: any[] = await this.db.query(
         `SELECT
            COUNT(CASE WHEN appointment_status = 'completed'  THEN 1 END) AS completed,
            COUNT(CASE WHEN appointment_status = 'no_show'    THEN 1 END) AS no_shows,
@@ -31,11 +69,11 @@ export class CronService {
            )                                                              AS total_revenue
          FROM appointments
          WHERE appointment_date = ? AND status = 1`,
-        [today],
+        [todayStr],
       );
 
       // Top earning service of the day
-      const topServiceRows: { service_name: string; revenue: string }[] =
+      const topServiceRows: any[] =
         await this.db.query(
           `SELECT s.name AS service_name, SUM(aps.price_at_booking) AS revenue
            FROM appointment_services aps
@@ -46,11 +84,11 @@ export class CronService {
            GROUP BY s.id, s.name
            ORDER BY revenue DESC
            LIMIT 1`,
-          [today],
+          [todayStr],
         );
 
       // Top performing stylist of the day
-      const topStylistRows: { stylist_name: string; appointments: string }[] =
+      const topStylistRows: any[] =
         await this.db.query(
           `SELECT st.name AS stylist_name, COUNT(a.id) AS appointments
            FROM appointments a
@@ -59,13 +97,13 @@ export class CronService {
            GROUP BY st.id, st.name
            ORDER BY appointments DESC
            LIMIT 1`,
-          [today],
+          [todayStr],
         );
 
       // Log the summary
       this.logger.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  📊 DAILY REVENUE SUMMARY — ${today}
+  📊 DAILY REVENUE SUMMARY — ${todayStr}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ✅ Completed Appointments : ${summary.completed}
   🚫 No-Shows              : ${summary.no_shows}
@@ -74,10 +112,10 @@ export class CronService {
   🏆 Top Service           : ${topServiceRows[0]?.service_name ?? 'N/A'} (₹${Number(topServiceRows[0]?.revenue ?? 0).toFixed(2)})
   🌟 Top Stylist           : ${topStylistRows[0]?.stylist_name ?? 'N/A'} (${topStylistRows[0]?.appointments ?? 0} appts)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    } catch (err: unknown) {
+    } catch (err: any) {
       this.logger.error(
-        `[CRON] Daily revenue summary failed for ${today}`,
-        err instanceof Error ? err.stack : String(err),
+        `[CRON] Daily revenue summary failed for ${todayStr}`,
+        err.stack,
       );
     }
   }

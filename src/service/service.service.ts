@@ -4,16 +4,24 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { IService } from './interfaces/service.interface';
 import { ServiceCategory, Gender } from 'src/common/enums';
+import {
+  GENERATE_SERVICE_CODE,
+  INSERT_SERVICE,
+  FIND_SERVICE_BY_CODE,
+  COUNT_ALL_SERVICES,
+  FIND_ALL_SERVICES,
+  FIND_SERVICE_BY_ID,
+  TOGGLE_SERVICE_AVAILABILITY,
+  UPDATE_SERVICE,
+  DELETE_SERVICE,
+} from './service.query';
 
 @Injectable()
 export class ServiceService {
   constructor(private readonly db: DatabaseService) {}
 
   private async generateServiceCode(): Promise<string> {
-    const rows = await this.db.query<{ max_num: number | null }>(
-      `SELECT MAX(CAST(SUBSTRING(service_code, 5) AS UNSIGNED)) AS max_num
-       FROM services WHERE service_code REGEXP '^SRV-[0-9]+$'`,
-    );
+    const rows = await this.db.query<{ max_num: number | null }>(GENERATE_SERVICE_CODE);
     const maxNum = Number(rows[0]?.max_num ?? 0);
     return `SRV-${String(maxNum + 1).padStart(3, '0')}`;
   }
@@ -22,16 +30,17 @@ export class ServiceService {
     const serviceCode = await this.generateServiceCode();
     const gender = dto.gender ?? Gender.UNISEX;
 
-    await this.db.execute(
-      `INSERT INTO services (service_code, name, category, duration_minutes, price, gender, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [serviceCode, dto.name, dto.category, dto.durationMinutes, dto.price, gender, dto.description ?? null],
-    );
+    await this.db.execute(INSERT_SERVICE, [
+      serviceCode,
+      dto.name,
+      dto.category,
+      dto.durationMinutes,
+      dto.price,
+      gender,
+      dto.description ?? null,
+    ]);
 
-    const rows = await this.db.query<IService>(
-      `SELECT * FROM services WHERE service_code = ?`,
-      [serviceCode],
-    );
+    const rows = await this.db.query<IService>(FIND_SERVICE_BY_CODE, [serviceCode]);
     return rows[0];
   }
 
@@ -45,16 +54,20 @@ export class ServiceService {
     const params: (string | number)[] = [];
     let whereSql = `WHERE status = 1`;
 
-    if (category) { whereSql += ` AND category = ?`; params.push(category); }
-    if (gender)   { whereSql += ` AND gender = ?`;   params.push(gender); }
+    if (category) {
+      whereSql += ` AND category = ?`;
+      params.push(category);
+    }
+    if (gender) {
+      whereSql += ` AND gender = ?`;
+      params.push(gender);
+    }
 
-    const countRows = await this.db.query<{ total: string }>(
-      `SELECT COUNT(*) AS total FROM services ${whereSql}`, params,
-    );
+    const countRows = await this.db.query<{ total: string }>(`SELECT COUNT(*) AS total FROM services ${whereSql}`, params);
     const total = parseInt(countRows[0].total, 10);
 
     const data = await this.db.query<IService>(
-      `SELECT * FROM services ${whereSql} ORDER BY category ASC, name ASC LIMIT ? OFFSET ?`,
+      `SELECT id, service_code, name, category, duration_minutes, price, gender, description, is_available, created_at FROM services ${whereSql} ORDER BY category ASC, name ASC LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     );
 
@@ -62,9 +75,7 @@ export class ServiceService {
   }
 
   async findOne(id: number): Promise<IService> {
-    const rows = await this.db.query<IService>(
-      `SELECT * FROM services WHERE id = ? AND status = 1`, [id],
-    );
+    const rows = await this.db.query<IService>(FIND_SERVICE_BY_ID, [id]);
     if (!rows.length) throw new NotFoundException(`Service with id ${id} not found`);
     return rows[0];
   }
@@ -83,26 +94,20 @@ export class ServiceService {
     if (dto.isAvailable !== undefined)     { fields.push('is_available = ?');     params.push(dto.isAvailable); }
 
     if (fields.length) {
-      await this.db.execute(
-        `UPDATE services SET ${fields.join(', ')} WHERE id = ?`, [...params, id],
-      );
+      await this.db.execute(UPDATE_SERVICE(fields), [...params, id]);
     }
-    const rows = await this.db.query<IService>(`SELECT * FROM services WHERE id = ?`, [id]);
-    return rows[0];
+    return this.findOne(id);
   }
 
   async toggleAvailability(id: number): Promise<IService> {
     await this.findOne(id);
-    await this.db.execute(
-      `UPDATE services SET is_available = IF(is_available = 1, 0, 1) WHERE id = ?`, [id],
-    );
-    const rows = await this.db.query<IService>(`SELECT * FROM services WHERE id = ?`, [id]);
-    return rows[0];
+    await this.db.execute(TOGGLE_SERVICE_AVAILABILITY, [id]);
+    return this.findOne(id);
   }
 
   async remove(id: number): Promise<{ message: string }> {
     await this.findOne(id);
-    await this.db.execute(`UPDATE services SET status = 0 WHERE id = ?`, [id]);
+    await this.db.execute(DELETE_SERVICE, [id]);
     return { message: 'Service deleted successfully' };
   }
 }

@@ -4,13 +4,14 @@ export interface IUser {
   id: number;
   username: string;
   email: string;
-  password_hash: string;
   role: UserRole;
-  failed_attempts: number;
-  locked_until: Date | null;
-  status: number;
   created_at: string;
-  updated_at: string;
+  // Make these optional since we hide them from the frontend
+  password_hash?: string;
+  failed_attempts?: number;
+  locked_until?: Date | null;
+  status?: number;
+  updated_at?: string;
 }
 
 export interface IRefreshToken {

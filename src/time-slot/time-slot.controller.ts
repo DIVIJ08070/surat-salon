@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { TimeSlotService } from './time-slot.service';
 import { GenerateSlotsDto } from './dto/generate-slots.dto';
+import { BulkGenerateSlotsDto } from './dto/bulk-generate-slots.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UserRole, SlotStatus } from 'src/common/enums';
 
@@ -26,6 +27,14 @@ export class TimeSlotController {
   @ApiOperation({ summary: 'Generate time slots for a stylist over a date range (Admin only)' })
   generate(@Body() dto: GenerateSlotsDto): Promise<{ message: string; created: number }> {
     return this.timeSlotService.generate(dto);
+  }
+
+  // POST /time-slots/generate-bulk — Admin generates slots for all stylists
+  @Post('generate-bulk')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Generate time slots for ALL active stylists over a month (Admin only)' })
+  generateBulk(@Body() dto: BulkGenerateSlotsDto): Promise<{ message: string; created: number; stylistsProcessed: number }> {
+    return this.timeSlotService.generateBulk(dto);
   }
 
   // GET /time-slots?stylistId=&date=&slotStatus=&page=

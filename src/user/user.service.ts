@@ -3,6 +3,17 @@ import { DatabaseService } from 'src/database/database.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { IUser } from './interfaces/user.interface';
 import * as bcrypt from 'bcrypt';
+import {
+  INSERT_USER,
+  FIND_USER_BY_EMAIL_AFTER_INSERT,
+  FIND_USER_WITH_SECRETS_BY_EMAIL,
+  FIND_USER_WITH_SECRETS_BY_ID,
+  FIND_USER_BY_EMAIL_SAFE,
+  FIND_USER_BY_ID_SAFE,
+  UPDATE_USER_FAILED_ATTEMPTS,
+  RESET_USER_FAILED_ATTEMPTS,
+  LOCK_USER_ACCOUNT,
+} from './user.query';
 
 @Injectable()
 export class UserService {
@@ -10,53 +21,40 @@ export class UserService {
 
   async create(dto: CreateUserDto): Promise<IUser> {
     const passwordHash = await bcrypt.hash(dto.password, 10);
-
-    await this.db.execute(
-      `INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)`,
-      [dto.email, passwordHash, dto.role],
-    );
-
-    const rows = await this.db.query<IUser>(
-      `SELECT * FROM users WHERE email = ? LIMIT 1`,
-      [dto.email],
-    );
+    await this.db.execute(INSERT_USER, [dto.email, passwordHash, dto.role]);
+    const rows = await this.db.query<IUser>(FIND_USER_BY_EMAIL_AFTER_INSERT, [dto.email]);
     return rows[0];
   }
 
+  async findWithSecretsByEmail(email: string): Promise<IUser | null> {
+    const rows = await this.db.query<IUser>(FIND_USER_WITH_SECRETS_BY_EMAIL, [email]);
+    return rows[0] ?? null;
+  }
+
+  async findWithSecretsById(id: number): Promise<IUser | null> {
+    const rows = await this.db.query<IUser>(FIND_USER_WITH_SECRETS_BY_ID, [id]);
+    return rows[0] ?? null;
+  }
+
   async findByEmail(email: string): Promise<IUser | null> {
-    const rows = await this.db.query<IUser>(
-      `SELECT * FROM users WHERE email = ? AND status = 1 LIMIT 1`,
-      [email],
-    );
+    const rows = await this.db.query<IUser>(FIND_USER_BY_EMAIL_SAFE, [email]);
     return rows[0] ?? null;
   }
 
   async findById(id: number): Promise<IUser | null> {
-    const rows = await this.db.query<IUser>(
-      `SELECT * FROM users WHERE id = ? AND status = 1 LIMIT 1`,
-      [id],
-    );
+    const rows = await this.db.query<IUser>(FIND_USER_BY_ID_SAFE, [id]);
     return rows[0] ?? null;
   }
 
   async lockAccount(id: number, lockedUntil: Date, failedAttempts: number): Promise<void> {
-    await this.db.execute(
-      `UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?`,
-      [failedAttempts, lockedUntil, id],
-    );
+    await this.db.execute(LOCK_USER_ACCOUNT, [failedAttempts, lockedUntil, id]);
   }
 
   async incrementFailedAttempts(id: number, failedAttempts: number): Promise<void> {
-    await this.db.execute(
-      `UPDATE users SET failed_attempts = ? WHERE id = ?`,
-      [failedAttempts, id],
-    );
+    await this.db.execute(UPDATE_USER_FAILED_ATTEMPTS, [failedAttempts, id]);
   }
 
   async resetFailedAttempts(id: number): Promise<void> {
-    await this.db.execute(
-      `UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?`,
-      [id],
-    );
+    await this.db.execute(RESET_USER_FAILED_ATTEMPTS, [id]);
   }
 }

@@ -9,6 +9,13 @@ import { LoginDto } from './dto/Login.dto';
 import { CreateUserDto } from 'src/user/dto/create-user.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { IUser } from 'src/user/interfaces/user.interface';
+import {
+  INSERT_REFRESH_TOKEN,
+  FIND_ACTIVE_REFRESH_TOKENS,
+  FIND_ALL_REFRESH_TOKENS_BY_USER,
+  REVOKE_REFRESH_TOKEN,
+  INSERT_BLACKLISTED_TOKEN,
+} from './auth.query';
 
 interface RefreshTokenRow {
   id: number;
@@ -50,10 +57,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || '7', 10));
 
-    await this.db.execute(
-      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)`,
-      [userId, tokenHash, expiresAt],
-    );
+    await this.db.execute(INSERT_REFRESH_TOKEN, [userId, tokenHash, expiresAt]);
 
     return rawToken;
   }
@@ -61,7 +65,7 @@ export class AuthService {
   // ─── SIGNUP ────────────────────────────────────────────────────────────────
 
   async signup(dto: CreateUserDto): Promise<LogoutDto> {
-    const existing = await this.userService.findByEmail(dto.email);
+    const existing = await this.userService.findWithSecretsByEmail(dto.email);
     if (existing) throw new ConflictException('User already exists');
 
     const newUser = await this.userService.create(dto);
@@ -73,7 +77,7 @@ export class AuthService {
   // ─── LOGIN ─────────────────────────────────────────────────────────────────
 
   async login(dto: LoginDto): Promise<LogoutDto> {
-    const user = await this.userService.findByEmail(dto.email);
+    const user = await this.userService.findWithSecretsByEmail(dto.email);
     if (!user) throw new UnauthorizedException('No account found with that email');
 
     if (user.locked_until && new Date(user.locked_until) > new Date()) {
@@ -81,6 +85,10 @@ export class AuthService {
         (new Date(user.locked_until).getTime() - Date.now()) / (1000 * 60),
       );
       throw new UnauthorizedException(`Account locked. Try again in ${remainingTime} minutes.`);
+    }
+
+    if (!user.password_hash) {
+      throw new UnauthorizedException('Invalid user internal state');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password_hash);
@@ -103,10 +111,7 @@ export class AuthService {
     if (decoded?.jti && decoded?.exp) {
       const ttl = decoded.exp - Math.floor(Date.now() / 1000);
       if (ttl > 0) {
-        await this.db.execute(
-          `INSERT INTO token_blacklist (jti, expires_at) VALUES (?, ?)`,
-          [decoded.jti, new Date(decoded.exp * 1000)],
-        );
+        await this.db.execute(INSERT_BLACKLISTED_TOKEN, [decoded.jti, new Date(decoded.exp * 1000)]);
       }
     }
 
@@ -114,17 +119,11 @@ export class AuthService {
     if (refreshToken) {
       const decodedRefresh = this.jwtService.decode(refreshToken) as { sub?: number } | null;
       if (decodedRefresh?.sub) {
-        const activeTokens = await this.db.query<RefreshTokenRow>(
-          `SELECT id, token_hash, status FROM refresh_tokens WHERE user_id = ?`,
-          [decodedRefresh.sub],
-        );
+        const activeTokens = await this.db.query<RefreshTokenRow>(FIND_ALL_REFRESH_TOKENS_BY_USER, [decodedRefresh.sub]);
         for (const token of activeTokens) {
           const isMatch = await bcrypt.compare(refreshToken, token.token_hash).catch(() => false);
           if (isMatch) {
-            await this.db.execute(
-              `UPDATE refresh_tokens SET status = 0 WHERE id = ?`,
-              [token.id],
-            );
+            await this.db.execute(REVOKE_REFRESH_TOKEN, [token.id]);
             break;
           }
         }
@@ -144,10 +143,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const activeTokens = await this.db.query<RefreshTokenRow>(
-      `SELECT id, token_hash FROM refresh_tokens WHERE user_id = ? AND status = 1`,
-      [decoded.sub],
-    );
+    const activeTokens = await this.db.query<RefreshTokenRow>(FIND_ACTIVE_REFRESH_TOKENS, [decoded.sub]);
 
     let isValidToken = false;
     for (const token of activeTokens) {
@@ -157,7 +153,7 @@ export class AuthService {
 
     if (!isValidToken) throw new UnauthorizedException('Refresh token is inactive or logged out');
 
-    const user = await this.userService.findById(decoded.sub);
+    const user = await this.userService.findWithSecretsById(decoded.sub);
     if (!user) throw new UnauthorizedException('User not found');
 
     return { accessToken: this.generateAccessToken(user) };
@@ -166,7 +162,7 @@ export class AuthService {
   // ─── FAILED LOGIN HANDLER ──────────────────────────────────────────────────
 
   private async handleFailedLogin(user: IUser): Promise<void> {
-    const newFailedAttempts = user.failed_attempts + 1;
+    const newFailedAttempts = (user.failed_attempts ?? 0) + 1;
 
     if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
       const lockedUntil = new Date();

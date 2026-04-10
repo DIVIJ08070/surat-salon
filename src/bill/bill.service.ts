@@ -3,6 +3,18 @@ import { DatabaseService } from 'src/database/database.service';
 import { CreateBillDto, PayBillDto } from './dto/bill.dto';
 import { IBill } from './interfaces/bill.interface';
 import { AppointmentStatus, BillStatus } from 'src/common/enums';
+import {
+  GENERATE_BILL_NUMBER,
+  CHECK_APPOINTMENT_FOR_BILL,
+  CHECK_BILL_ALREADY_EXISTS,
+  INSERT_BILL,
+  FIND_BILL_BY_NUMBER,
+  FIND_BILL_BY_ID,
+  FIND_BILL_BY_APPOINTMENT,
+  FIND_ALL_BILLS,
+  PAY_BILL,
+  REFUND_BILL,
+} from './bill.query';
 
 // ─── Full bill row (joined with appointment, customer, stylist) ───────────────
 interface BillDetailRow extends IBill {
@@ -15,18 +27,6 @@ interface BillDetailRow extends IBill {
   stylist_name: string;
 }
 
-const BILL_SELECT = `
-  SELECT b.id, b.bill_number, b.subtotal, b.discount, b.tax, b.total,
-         b.payment_method, b.bill_status, b.paid_at, b.created_at,
-         a.appointment_number, a.appointment_date, a.start_time,
-         c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
-         st.name AS stylist_name
-  FROM bills b
-  JOIN appointments a ON a.id = b.appointment_id
-  JOIN customers c ON c.id = a.customer_id
-  JOIN stylists st ON st.id = a.stylist_id
-`;
-
 @Injectable()
 export class BillService {
   constructor(private readonly db: DatabaseService) {}
@@ -35,10 +35,7 @@ export class BillService {
 
   private async generateBillNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const rows = await this.db.query<{ max_num: number | null }>(
-      `SELECT MAX(CAST(SUBSTRING_INDEX(bill_number, '-', -1) AS UNSIGNED)) AS max_num
-       FROM bills WHERE bill_number REGEXP '^BILL-${year}-[0-9]+$'`,
-    );
+    const rows = await this.db.query<{ max_num: number | null }>(GENERATE_BILL_NUMBER(year));
     const maxNum = Number(rows[0]?.max_num ?? 0);
     return `BILL-${year}-${String(maxNum + 1).padStart(3, '0')}`;
   }
@@ -47,7 +44,7 @@ export class BillService {
 
   async create(dto: CreateBillDto): Promise<BillDetailRow> {
     const aptRows = await this.db.query<{ id: number; appointment_status: string; total_amount: number }>(
-      `SELECT id, appointment_status, total_amount FROM appointments WHERE id = ? AND status = 1`,
+      CHECK_APPOINTMENT_FOR_BILL,
       [dto.appointmentId],
     );
     if (!aptRows.length) throw new NotFoundException(`Appointment with id ${dto.appointmentId} not found`);
@@ -57,9 +54,7 @@ export class BillService {
       );
     }
 
-    const existing = await this.db.query<{ id: number }>(
-      `SELECT id FROM bills WHERE appointment_id = ? AND status = 1`, [dto.appointmentId],
-    );
+    const existing = await this.db.query<{ id: number }>(CHECK_BILL_ALREADY_EXISTS, [dto.appointmentId]);
     if (existing.length) throw new ConflictException(`A bill already exists for appointment ${dto.appointmentId}`);
 
     const subtotal = Number(aptRows[0].total_amount);
@@ -71,12 +66,17 @@ export class BillService {
 
     const billNumber = await this.generateBillNumber();
 
-    await this.db.execute(
-      `INSERT INTO bills (appointment_id, bill_number, subtotal, discount, tax, total, bill_status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [dto.appointmentId, billNumber, subtotal, discount, tax, total, BillStatus.PENDING],
-    );
+    await this.db.execute(INSERT_BILL, [
+      dto.appointmentId,
+      billNumber,
+      subtotal,
+      discount,
+      tax,
+      total,
+      BillStatus.PENDING,
+    ]);
 
-    const rows = await this.db.query<BillDetailRow>(`${BILL_SELECT} WHERE b.bill_number = ?`, [billNumber]);
+    const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_NUMBER, [billNumber]);
     return rows[0];
   }
 
@@ -87,10 +87,7 @@ export class BillService {
     if (bill.bill_status === BillStatus.PAID) throw new BadRequestException('Bill is already paid');
     if (bill.bill_status === BillStatus.REFUNDED) throw new BadRequestException('Cannot pay a refunded bill');
 
-    await this.db.execute(
-      `UPDATE bills SET bill_status = ?, payment_method = ?, paid_at = NOW() WHERE id = ?`,
-      [BillStatus.PAID, dto.paymentMethod, id],
-    );
+    await this.db.execute(PAY_BILL, [BillStatus.PAID, dto.paymentMethod, id]);
     return this.findOne(id);
   }
 
@@ -99,14 +96,14 @@ export class BillService {
   async refund(id: number): Promise<{ message: string }> {
     const bill = await this.findOne(id);
     if (bill.bill_status !== BillStatus.PAID) throw new BadRequestException('Only PAID bills can be refunded');
-    await this.db.execute(`UPDATE bills SET bill_status = ? WHERE id = ?`, [BillStatus.REFUNDED, id]);
+    await this.db.execute(REFUND_BILL, [BillStatus.REFUNDED, id]);
     return { message: 'Bill refunded successfully' };
   }
 
   // ─── GET BILL BY ID ───────────────────────────────────────────────────────────
 
   async findOne(id: number): Promise<BillDetailRow> {
-    const rows = await this.db.query<BillDetailRow>(`${BILL_SELECT} WHERE b.id = ? AND b.status = 1`, [id]);
+    const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_ID, [id]);
     if (!rows.length) throw new NotFoundException(`Bill with id ${id} not found`);
     return rows[0];
   }
@@ -114,7 +111,7 @@ export class BillService {
   // ─── GET BILL BY APPOINTMENT ID ───────────────────────────────────────────────
 
   async findByAppointment(appointmentId: number): Promise<BillDetailRow> {
-    const rows = await this.db.query<BillDetailRow>(`${BILL_SELECT} WHERE b.appointment_id = ? AND b.status = 1`, [appointmentId]);
+    const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_APPOINTMENT, [appointmentId]);
     if (!rows.length) throw new NotFoundException(`No bill found for appointment ${appointmentId}`);
     return rows[0];
   }
@@ -138,16 +135,7 @@ export class BillService {
     const total = parseInt(countRows[0].total, 10);
 
     const data = await this.db.query<BillDetailRow>(
-      `SELECT b.id, b.bill_number, b.subtotal, b.discount, b.tax, b.total,
-              b.payment_method, b.bill_status, b.paid_at, b.created_at,
-              a.appointment_number, a.appointment_date,
-              c.name AS customer_name, c.customer_code,
-              st.name AS stylist_name
-       FROM bills b
-       JOIN appointments a ON a.id = b.appointment_id
-       JOIN customers c ON c.id = a.customer_id
-       JOIN stylists st ON st.id = a.stylist_id
-       ${whereSql} ORDER BY b.created_at DESC LIMIT ? OFFSET ?`,
+      FIND_ALL_BILLS(whereSql),
       [...params, limit, offset],
     );
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };

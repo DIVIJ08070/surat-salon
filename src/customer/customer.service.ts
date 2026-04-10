@@ -3,6 +3,18 @@ import { DatabaseService } from 'src/database/database.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { ICustomer } from './interfaces/customer.interface';
+import {
+  GENERATE_CUSTOMER_CODE,
+  CHECK_CUSTOMER_PHONE_EXISTS,
+  CHECK_CUSTOMER_PHONE_CONFLICT,
+  INSERT_CUSTOMER,
+  FIND_CUSTOMER_BY_CODE,
+  FIND_ALL_CUSTOMERS,
+  FIND_ALL_CUSTOMERS_SEARCH,
+  FIND_CUSTOMER_BY_ID,
+  UPDATE_CUSTOMER,
+  DELETE_CUSTOMER,
+} from './customer.query';
 
 @Injectable()
 export class CustomerService {
@@ -10,44 +22,39 @@ export class CustomerService {
 
   private async generateCustomerCode(): Promise<string> {
     const year = new Date().getFullYear();
-    const rows = await this.db.query<{ max_num: number | null }>(
-      `SELECT MAX(CAST(SUBSTRING_INDEX(customer_code, '-', -1) AS UNSIGNED)) AS max_num
-       FROM customers WHERE customer_code REGEXP '^CUST-${year}-[0-9]+$'`,
-    );
+    const rows = await this.db.query<{ max_num: number | null }>(GENERATE_CUSTOMER_CODE(year));
     const maxNum = Number(rows[0]?.max_num ?? 0);
     return `CUST-${year}-${String(maxNum + 1).padStart(3, '0')}`;
   }
 
   async create(dto: CreateCustomerDto): Promise<ICustomer> {
-    const existing = await this.db.query<{ id: number }>(
-      `SELECT id FROM customers WHERE phone = ? AND status = 1`,
-      [dto.phone],
-    );
+    const existing = await this.db.query<{ id: number }>(CHECK_CUSTOMER_PHONE_EXISTS, [dto.phone]);
     if (existing.length) throw new ConflictException(`Phone number '${dto.phone}' is already registered`);
 
     const customerCode = await this.generateCustomerCode();
 
-    await this.db.execute(
-      `INSERT INTO customers (customer_code, name, phone, email, gender, dob) VALUES (?, ?, ?, ?, ?, ?)`,
-      [customerCode, dto.name, dto.phone, dto.email ?? null, dto.gender ?? null, dto.dob ?? null],
-    );
+    await this.db.execute(INSERT_CUSTOMER, [
+      customerCode,
+      dto.name,
+      dto.phone,
+      dto.email ?? null,
+      dto.gender ?? null,
+      dto.dob ?? null,
+    ]);
 
-    const rows = await this.db.query<ICustomer>(`SELECT * FROM customers WHERE customer_code = ?`, [customerCode]);
+    const rows = await this.db.query<ICustomer>(FIND_CUSTOMER_BY_CODE, [customerCode]);
     return rows[0];
   }
 
   async findAll(search?: string): Promise<ICustomer[]> {
     if (search) {
-      return this.db.query<ICustomer>(
-        `SELECT * FROM customers WHERE status = 1 AND (name LIKE ? OR phone LIKE ? OR customer_code LIKE ?) ORDER BY name ASC`,
-        [`%${search}%`, `%${search}%`, `%${search}%`],
-      );
+      return this.db.query<ICustomer>(FIND_ALL_CUSTOMERS_SEARCH, [`%${search}%`, `%${search}%`, `%${search}%`]);
     }
-    return this.db.query<ICustomer>(`SELECT * FROM customers WHERE status = 1 ORDER BY name ASC`);
+    return this.db.query<ICustomer>(FIND_ALL_CUSTOMERS);
   }
 
   async findOne(id: number): Promise<ICustomer> {
-    const rows = await this.db.query<ICustomer>(`SELECT * FROM customers WHERE id = ? AND status = 1`, [id]);
+    const rows = await this.db.query<ICustomer>(FIND_CUSTOMER_BY_ID, [id]);
     if (!rows.length) throw new NotFoundException(`Customer with id ${id} not found`);
     return rows[0];
   }
@@ -56,9 +63,7 @@ export class CustomerService {
     await this.findOne(id);
 
     if (dto.phone) {
-      const clash = await this.db.query<{ id: number }>(
-        `SELECT id FROM customers WHERE phone = ? AND id != ? AND status = 1`, [dto.phone, id],
-      );
+      const clash = await this.db.query<{ id: number }>(CHECK_CUSTOMER_PHONE_CONFLICT, [dto.phone, id]);
       if (clash.length) throw new ConflictException(`Phone number '${dto.phone}' is already registered`);
     }
 
@@ -72,14 +77,14 @@ export class CustomerService {
     if (dto.dob !== undefined)    { fields.push('dob = ?');    params.push(dto.dob); }
 
     if (fields.length) {
-      await this.db.execute(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`, [...params, String(id)]);
+      await this.db.execute(UPDATE_CUSTOMER(fields), [...params, String(id)]);
     }
     return this.findOne(id);
   }
 
   async remove(id: number): Promise<{ message: string }> {
     await this.findOne(id);
-    await this.db.execute(`UPDATE customers SET status = 0 WHERE id = ?`, [id]);
+    await this.db.execute(DELETE_CUSTOMER, [id]);
     return { message: 'Customer deleted successfully' };
   }
 }

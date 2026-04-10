@@ -6,8 +6,9 @@ import { LogoutDto } from './dto/logout.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ApiBearerAuth } from '@nestjs/swagger';
 
+//source ~/.zshrc
+
 @Controller('auth')
-@ApiBearerAuth()
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 

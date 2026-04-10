@@ -10,7 +10,8 @@ export interface IService {
   gender: Gender;
   description: string | null;
   is_available: number;
-  status: number;
   created_at: string;
-  updated_at: string;
+  // Internal metadata
+  status?: number;
+  updated_at?: string;
 }

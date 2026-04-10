@@ -3,8 +3,6 @@ import { AppointmentStatus, AppointmentServiceStatus } from 'src/common/enums';
 export interface IAppointment {
   id: number;
   appointment_number: string;
-  customer_id: number;
-  stylist_id: number;
   appointment_date: string;
   start_time: string;
   end_time: string;
@@ -12,9 +10,12 @@ export interface IAppointment {
   total_amount: number;
   appointment_status: AppointmentStatus;
   notes: string | null;
-  status: number;
   created_at: string;
-  updated_at: string;
+  // Internal metadata or redundant IDs
+  customer_id?: number;
+  stylist_id?: number;
+  status?: number;
+  updated_at?: string;
 }
 
 export interface IAppointmentService {
@@ -24,7 +25,8 @@ export interface IAppointmentService {
   price_at_booking: number;
   duration_minutes: number;
   appointment_service_status: AppointmentServiceStatus;
-  status: number;
   created_at: string;
-  updated_at: string;
+  // Internal metadata
+  status?: number;
+  updated_at?: string;
 }

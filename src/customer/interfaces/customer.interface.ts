@@ -8,7 +8,8 @@ export interface ICustomer {
   email: string | null;
   gender: Gender | null;
   dob: string | null;
-  status: number;
   created_at: string;
-  updated_at: string;
+  // Internal metadata
+  status?: number;
+  updated_at?: string;
 }
