@@ -47,6 +47,7 @@ export class ServiceService {
   async findAll(
     category?: ServiceCategory,
     gender?: Gender,
+    search?: string,
     page = 1,
     limit = 10,
   ): Promise<{ data: IService[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
@@ -61,6 +62,10 @@ export class ServiceService {
     if (gender) {
       whereSql += ` AND gender = ?`;
       params.push(gender);
+    }
+    if (search) {
+      whereSql += ` AND name LIKE ?`;
+      params.push(`%${search}%`);
     }
 
     const countRows = await this.db.query<{ total: string }>(`SELECT COUNT(*) AS total FROM services ${whereSql}`, params);

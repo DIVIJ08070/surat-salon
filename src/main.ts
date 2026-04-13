@@ -33,8 +33,15 @@ async function bootstrap() {
   // Global Filters
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Enable CORS
-  app.enableCors();
+  // Use cookie-parser
+  const cookieParser = require('cookie-parser');
+  app.use(cookieParser());
+
+  // Enable CORS securely for Auth Cookies
+  app.enableCors({
+    origin: 'http://localhost:5173',
+    credentials: true,
+  });
 
   // Swagger Documentation Setup at /api/docs
   const config = new DocumentBuilder()

@@ -64,7 +64,7 @@ export class AuthService {
 
   // ─── SIGNUP ────────────────────────────────────────────────────────────────
 
-  async signup(dto: CreateUserDto): Promise<LogoutDto> {
+  async signup(dto: CreateUserDto): Promise<{ accessToken: string; refreshToken: string }> {
     const existing = await this.userService.findWithSecretsByEmail(dto.email);
     if (existing) throw new ConflictException('User already exists');
 
@@ -76,7 +76,7 @@ export class AuthService {
 
   // ─── LOGIN ─────────────────────────────────────────────────────────────────
 
-  async login(dto: LoginDto): Promise<LogoutDto> {
+  async login(dto: LoginDto): Promise<{ accessToken: string; refreshToken: string }> {
     const user = await this.userService.findWithSecretsByEmail(dto.email);
     if (!user) throw new UnauthorizedException('No account found with that email');
 

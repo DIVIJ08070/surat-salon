@@ -40,14 +40,17 @@ export class ServiceController {
   @ApiQuery({ name: 'gender', enum: Gender, required: false })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
+  @ApiQuery({ name: 'search', required: false })
   findAll(
     @Query('category') category?: ServiceCategory,
     @Query('gender') gender?: Gender,
-    @Query() pagination?: PaginationDto,
+    @Query('search') search?: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
   ) {
-    const page = pagination?.page ?? 1;
-    const limit = pagination?.limit ?? 10;
-    return this.serviceService.findAll(category, gender, page, limit);
+    const page = pageRaw ? parseInt(pageRaw, 10) : 1;
+    const limit = limitRaw ? parseInt(limitRaw, 10) : 10;
+    return this.serviceService.findAll(category, gender, search, page, limit);
   }
 
   // GET /services/:id

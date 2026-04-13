@@ -16,6 +16,10 @@ interface ErrorResponse {
   timestamp: string;
 }
 
+interface NestErrorResponse {
+  message: string | string[];
+}
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -30,10 +34,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+    const res = exception instanceof HttpException ? exception.getResponse() : null;
+    let message: string;
+
+    if (typeof res === 'string') {
+      message = res;
+    } else if (res && typeof res === 'object' && 'message' in res) {
+      const nestRes = res as NestErrorResponse;
+      message = Array.isArray(nestRes.message)
+        ? nestRes.message.join(', ')
+        : nestRes.message;
+    } else {
+      message = exception.message || 'Internal server error';
+    }
 
     this.logger.error(`${request.method} ${request.url}`, exception.stack);
     console.error('FULL ERROR:', exception);
