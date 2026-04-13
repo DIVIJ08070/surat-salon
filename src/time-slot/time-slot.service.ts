@@ -29,8 +29,13 @@ function minutesToTime(mins: number): string {
   return `${h}:${m}:00`;
 }
 
+function getDayFromDate(dateStr: string): number {
+  const date = new Date(dateStr + 'T12:00:00Z'); 
+  return date.getUTCDay();
+}
+
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr);
+  const d = new Date(dateStr + 'T12:00:00Z');
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
@@ -186,7 +191,7 @@ export class TimeSlotService {
     let created = 0;
     for (const date of dateRange(fromDate, toDate)) {
       if (leaveDates.has(date)) continue;
-      if (!workingDayNums.has(new Date(date).getUTCDay())) continue;
+      if (!workingDayNums.has(getDayFromDate(date))) continue;
 
       let cursor = shiftStartMin;
       while (cursor + slotDuration <= shiftEndMin) {

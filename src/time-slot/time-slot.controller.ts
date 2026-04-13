@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { TimeSlotService } from './time-slot.service';
 import { GenerateSlotsDto } from './dto/generate-slots.dto';
 import { BulkGenerateSlotsDto } from './dto/bulk-generate-slots.dto';
+import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UserRole, SlotStatus } from 'src/common/enums';
 
@@ -63,6 +64,13 @@ export class TimeSlotController {
       limit: limit ? parseInt(limit, 10) : 10,
     });
   }
+    // GET /time-slots/available?stylistId=&date=  — used by appointment booking UI
+  @Get('available')
+  @ApiOperation({ summary: 'Get all available slots for a stylist on a specific date' })
+  getAvailable(@Query() dto: GetAvailableSlotsDto): Promise<object[]> {
+    return this.timeSlotService.getAvailableSlots(dto.stylistId, dto.date);
+  }
+
 
   // GET /time-slots/:id
   @Get(':id')
@@ -71,17 +79,6 @@ export class TimeSlotController {
     return this.timeSlotService.findOne(id);
   }
 
-  // GET /time-slots/available?stylistId=&date=  — used by appointment booking UI
-  @Get('available')
-  @ApiOperation({ summary: 'Get all available slots for a stylist on a specific date' })
-  @ApiQuery({ name: 'stylistId', required: true })
-  @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
-  getAvailable(
-    @Query('stylistId') stylistId: string,
-    @Query('date') date: string,
-  ): Promise<object[]> {
-    return this.timeSlotService.getAvailableSlots(parseInt(stylistId, 10), date);
-  }
 
   // DELETE /time-slots/stylist/:stylistId/date/:date  — Admin removes available slots for a date
   @Delete('stylist/:stylistId/date/:date')

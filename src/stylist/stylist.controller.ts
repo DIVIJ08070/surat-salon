@@ -12,12 +12,12 @@ import {
 import { StylistService } from './stylist.service';
 import { CreateStylistDto } from './dto/create-stylist.dto';
 import { UpdateStylistDto } from './dto/update-stylist.dto';
+import { GetStylistsFilterDto } from './dto/get-stylists-filter.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { User } from 'src/common/decorators/user.decorator';
 import { UserRole, StylistSpecialisation, StylistStatus } from 'src/common/enums';
 import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import type { AuthUser } from 'src/auth/jwt.stratergy';
-import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { AssignServicesDto } from './dto/assign-services.dto';
 
 @ApiTags('Stylists')
@@ -36,20 +36,18 @@ export class StylistController {
 
   // GET /stylists?specialisation=hair_stylist&stylistStatus=active&page=1&limit=10
   @Get()
-  @ApiOperation({ summary: 'Get all active stylists with pagination (default: 10 per page)' })
-  @ApiQuery({ name: 'specialisation', enum: StylistSpecialisation, required: false })
-  @ApiQuery({ name: 'stylistStatus', enum: StylistStatus, required: false })
-  @ApiQuery({ name: 'page', required: false, example: 1 })
-  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  @ApiOperation({ summary: 'Get all stylists with filters and pagination' })
   findAll(
     @User() user: AuthUser,
-    @Query('specialisation') specialisation?: StylistSpecialisation,
-    @Query('stylistStatus') stylistStatus?: StylistStatus,
-    @Query() pagination?: PaginationDto,
+    @Query() query: GetStylistsFilterDto,
   ) {
-    const page = pagination?.page ?? 1;
-    const limit = pagination?.limit ?? 10;
-    return this.stylistService.findAll(user.role as UserRole, specialisation, stylistStatus, page, limit);
+    return this.stylistService.findAll(
+      user.role as UserRole,
+      query.specialisation,
+      query.stylistStatus,
+      query.page,
+      query.limit,
+    );
   }
 
   // GET /stylists/:id
