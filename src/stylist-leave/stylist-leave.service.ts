@@ -73,7 +73,6 @@ export class StylistLeaveService {
     if (leave.leave_status !== LeaveStatus.PENDING) throw new BadRequestException('Only PENDING leave requests can be approved');
 
     await this.db.execute(APPROVE_LEAVE, [id]);
-    await this.db.execute(SET_STYLIST_ON_LEAVE, [leave.stylist_id]);
 
     if (leave.leave_start && leave.leave_end) {
       await this.db.execute(BLOCK_SLOTS_PARTIAL_LEAVE, [
@@ -114,7 +113,6 @@ export class StylistLeaveService {
     if (leave.leave_status !== LeaveStatus.APPROVED) throw new BadRequestException('Only APPROVED leave requests can be revoked');
 
     await this.db.execute(REJECT_LEAVE, [id]); // Note: Using reject query for revocation status update
-    await this.db.execute(SET_STYLIST_ACTIVE, [leave.stylist_id]);
     await this.db.execute(RELEASE_SLOTS_ON_REVOKE, [leave.stylist_id, leave.leave_date]);
     return { message: 'Leave revoked and time slots released' };
   }

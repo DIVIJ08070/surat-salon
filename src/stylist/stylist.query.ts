@@ -1,6 +1,6 @@
 export const INSERT_STYLIST = `
-  INSERT INTO stylists (name, specialisation, working_days, shift_start, shift_end, commission_rate)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO stylists (name, specialisation, working_days, shift_start, shift_end, commission_rate, user_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
 `;
 
 export const COUNT_ALL_STYLISTS = `
@@ -8,7 +8,7 @@ export const COUNT_ALL_STYLISTS = `
 `;
 
 export const FIND_ALL_STYLISTS_BASE = `
-  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, created_at
+  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, user_id, created_at
   FROM stylists
   WHERE status = 1
   ORDER BY name ASC
@@ -16,7 +16,7 @@ export const FIND_ALL_STYLISTS_BASE = `
 `;
 
 export const FIND_ALL_STYLISTS_ADMIN = `
-  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, commission_rate, created_at
+  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, commission_rate, user_id, created_at
   FROM stylists
   WHERE status = 1
   ORDER BY name ASC
@@ -24,13 +24,13 @@ export const FIND_ALL_STYLISTS_ADMIN = `
 `;
 
 export const FIND_STYLIST_BY_ID_BASE = `
-  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, created_at
+  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, user_id, created_at
   FROM stylists
   WHERE id = ? AND status = 1
 `;
 
 export const FIND_STYLIST_BY_ID_ADMIN = `
-  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, commission_rate, created_at
+  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, commission_rate, user_id, created_at
   FROM stylists
   WHERE id = ? AND status = 1
 `;
@@ -83,4 +83,11 @@ export const UPDATE_STYLIST = (fields: string[]) => `
 
 export const FIND_ALL_ACTIVE_STYLIST_IDS = `
   SELECT id FROM stylists WHERE status = 1
+`;
+
+export const FIND_STYLIST_BY_USER_ID = `
+  SELECT id, name, specialisation, working_days, shift_start, shift_end, stylist_status, commission_rate, user_id, created_at
+  FROM stylists
+  WHERE user_id = ? AND status = 1
+  LIMIT 1
 `;

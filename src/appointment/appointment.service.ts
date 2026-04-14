@@ -248,8 +248,15 @@ export class AppointmentService {
   // ─── STYLIST DAILY SCHEDULE ──────────────────────────────────────────────────
   // Stylists can only see their own schedule
 
-  async getDailySchedule(stylistId: number, date: string): Promise<AppointmentRow[]> {
-    return this.db.query<AppointmentRow>(FIND_STYLIST_DAILY_SCHEDULE, [stylistId, date]);
+  async getDailySchedule(stylistId: number, date: string): Promise<AppointmentDetail[]> {
+    const appointments = await this.db.query<AppointmentRow>(FIND_STYLIST_DAILY_SCHEDULE, [stylistId, date]);
+    
+    const result: AppointmentDetail[] = [];
+    for (const apt of appointments) {
+      const services = await this.db.query<AppointmentServiceRow>(FIND_APPOINTMENT_SERVICES, [apt.id]);
+      result.push({ ...apt, services });
+    }
+    return result;
   }
 
   // ─── MARK SERVICE AS COMPLETED ───────────────────────────────────────────────

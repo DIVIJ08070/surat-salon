@@ -94,15 +94,11 @@ export const FIND_APPOINTMENT_SERVICES = `
 
 export const FIND_STYLIST_DAILY_SCHEDULE = `
   SELECT a.id, a.appointment_number, a.appointment_date, a.start_time, a.end_time,
-         a.total_duration_minutes, a.total_amount, a.appointment_status,
-         c.name AS customer_name, c.phone AS customer_phone,
-         GROUP_CONCAT(s.name ORDER BY s.name SEPARATOR ', ') AS services
+         a.total_duration_minutes, a.appointment_status, a.notes, a.created_at,
+         c.name AS customer_name, c.phone AS customer_phone, c.customer_code
   FROM appointments a
   JOIN customers c ON c.id = a.customer_id
-  JOIN appointment_services aps ON aps.appointment_id = a.id AND aps.status = 1
-  JOIN services s ON s.id = aps.service_id
   WHERE a.stylist_id = ? AND a.appointment_date = ? AND a.status = 1
-  GROUP BY a.id
   ORDER BY a.start_time ASC
 `;
 

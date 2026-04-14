@@ -1,12 +1,12 @@
 export const FIND_USER_BY_EMAIL_SAFE = `
-  SELECT id, email, role, created_at
+  SELECT id, name, email, role, created_at
   FROM users
   WHERE email = ? AND status = 1
   LIMIT 1
 `;
 
 export const FIND_USER_BY_ID_SAFE = `
-  SELECT id, email, role, created_at
+  SELECT id, name, email, role, created_at
   FROM users
   WHERE id = ? AND status = 1
   LIMIT 1
@@ -27,15 +27,22 @@ export const FIND_USER_WITH_SECRETS_BY_ID = `
 `;
 
 export const FIND_USER_BY_EMAIL_AFTER_INSERT = `
-  SELECT id, email, role, created_at
+  SELECT id, name, email, role, created_at
   FROM users
   WHERE email = ?
   LIMIT 1
 `;
 
 export const INSERT_USER = `
-  INSERT INTO users (email, password_hash, role)
-  VALUES (?, ?, ?)
+  INSERT INTO users (name, email, password_hash, role)
+  VALUES (?, ?, ?, ?)
+`;
+
+export const FIND_ALL_USERS = `
+  SELECT id, name, email, role, created_at
+  FROM users
+  WHERE status = 1
+  ORDER BY name ASC
 `;
 
 export const UPDATE_USER_FAILED_ATTEMPTS = `

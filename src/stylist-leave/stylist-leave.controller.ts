@@ -25,8 +25,8 @@ export class StylistLeaveController {
 
   // POST /stylist-leaves  → Admin or Receptionist creates leave on behalf of stylist
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
-  @ApiOperation({ summary: 'Submit a leave request for a stylist (Admin / Receptionist)' })
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST, UserRole.STYLIST)
+  @ApiOperation({ summary: 'Submit a leave request' })
   create(@Body() dto: CreateLeaveDto): Promise<object> {
     return this.leaveService.create(dto);
   }
@@ -34,7 +34,8 @@ export class StylistLeaveController {
   // GET /stylist-leaves            → Admin sees all
   // GET /stylist-leaves?stylistId= → filter by stylist (Stylists use this to see own leaves)
   @Get()
-  @ApiOperation({ summary: 'Get all leave requests. Admin sees all; filter by ?stylistId= for a specific stylist.' })
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST, UserRole.STYLIST)
+  @ApiOperation({ summary: 'Get all leave requests. Admin sees all; others filter by stylistId.' })
   @ApiQuery({ name: 'stylistId', required: false, description: 'Filter by stylist ID' })
   findAll(@Query('stylistId') stylistId?: string): Promise<object[]> {
     return this.leaveService.findAll(stylistId ? parseInt(stylistId, 10) : undefined);
@@ -73,7 +74,8 @@ export class StylistLeaveController {
 
   // DELETE /stylist-leaves/:id  → Stylist cancels own pending leave
   @Delete(':id')
-  @ApiOperation({ summary: 'Cancel a PENDING leave request (Stylist or Admin)' })
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST, UserRole.STYLIST)
+  @ApiOperation({ summary: 'Cancel a PENDING leave request' })
   cancel(@Param('id', ParseIntPipe) id: number): Promise<{ message: string }> {
     return this.leaveService.cancel(id);
   }

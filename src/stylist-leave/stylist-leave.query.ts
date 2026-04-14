@@ -9,8 +9,8 @@ export const CHECK_DUPLICATE_LEAVE = `
 `;
 
 export const INSERT_STYLIST_LEAVE = `
-  INSERT INTO stylist_leaves (stylist_id, leave_date, leave_start, leave_end, reason)
-  VALUES (?, ?, ?, ?, ?)
+  INSERT INTO stylist_leaves (stylist_id, leave_date, leave_start, leave_end, reason, status)
+  VALUES (?, ?, ?, ?, ?, 1)
 `;
 
 export const FIND_LEAVE_AFTER_INSERT = `

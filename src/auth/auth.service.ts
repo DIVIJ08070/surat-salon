@@ -32,7 +32,7 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly db: DatabaseService,
-  ) {}
+  ) { }
 
   // ─── GENERATE ACCESS TOKEN ─────────────────────────────────────────────────
 

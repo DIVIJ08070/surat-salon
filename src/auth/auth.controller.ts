@@ -13,19 +13,6 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
-  @Post('signup')
-  async signup(@Body() createUserDto: CreateUserDto, @Res({ passthrough: true }) res: Response) {
-    const tokens = await this.authService.signup(createUserDto);
-    res.cookie('refreshToken', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-    return { accessToken: tokens.accessToken };
-  }
-
   @Post('login')
   async login(@Body() loginDto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const tokens = await this.authService.login(loginDto);

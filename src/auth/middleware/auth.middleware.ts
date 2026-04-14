@@ -55,6 +55,16 @@ export class AuthMiddleware implements NestMiddleware {
       role: payload.role,
     };
 
+    if (payload.role === 'stylist') {
+      const stylist = await this.db.query<{ id: number }>(
+        `SELECT id FROM stylists WHERE user_id = ? AND status = 1 LIMIT 1`,
+        [payload.sub],
+      );
+      if (stylist.length > 0) {
+        req.user.stylistId = stylist[0].id;
+      }
+    }
+
     next();
   }
 }

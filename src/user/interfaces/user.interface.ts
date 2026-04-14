@@ -2,7 +2,7 @@ import { UserRole } from 'src/common/enums';
 
 export interface IUser {
   id: number;
-  username: string;
+  name: string;
   email: string;
   role: UserRole;
   created_at: string;

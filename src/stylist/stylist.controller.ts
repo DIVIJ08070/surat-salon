@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Version,
 } from '@nestjs/common';
 import { StylistService } from './stylist.service';
 import { CreateStylistDto } from './dto/create-stylist.dto';
@@ -21,16 +22,23 @@ import type { AuthUser } from 'src/auth/jwt.stratergy';
 import { AssignServicesDto } from './dto/assign-services.dto';
 
 @ApiTags('Stylists')
-@Controller('stylists')
 @ApiBearerAuth()
+@Controller('stylists')
 export class StylistController {
   constructor(private readonly stylistService: StylistService) {}
+
+  // GET /stylists/me/profile -> current logged-in stylist
+  @Get('me/profile')
+  @ApiOperation({ summary: 'Get current stylist profile' })
+  getMyProfile(@User() user: any) {
+    return this.stylistService.findByUserId(user.user_id);
+  }
 
   // POST /stylists  → ADMIN only
   @Post()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Add a new stylist (Admin only)' })
-  create(@Body() createStylistDto: CreateStylistDto, @User() user: AuthUser) {
+  create(@Body() createStylistDto: CreateStylistDto, @User() user: any) {
     return this.stylistService.create(createStylistDto, user.role as UserRole);
   }
 

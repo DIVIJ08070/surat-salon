@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from 'src/database/database.service';
+import { DatabaseService } from '../database/database.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { IUser } from './interfaces/user.interface';
 import * as bcrypt from 'bcrypt';
@@ -13,17 +13,22 @@ import {
   UPDATE_USER_FAILED_ATTEMPTS,
   RESET_USER_FAILED_ATTEMPTS,
   LOCK_USER_ACCOUNT,
+  FIND_ALL_USERS,
 } from './user.query';
 
 @Injectable()
 export class UserService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly db: DatabaseService) { }
 
   async create(dto: CreateUserDto): Promise<IUser> {
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    await this.db.execute(INSERT_USER, [dto.email, passwordHash, dto.role]);
+    await this.db.execute(INSERT_USER, [dto.name, dto.email, passwordHash, dto.role]);
     const rows = await this.db.query<IUser>(FIND_USER_BY_EMAIL_AFTER_INSERT, [dto.email]);
     return rows[0];
+  }
+
+  async findAll(): Promise<IUser[]> {
+    return this.db.query<IUser>(FIND_ALL_USERS);
   }
 
   async findWithSecretsByEmail(email: string): Promise<IUser | null> {

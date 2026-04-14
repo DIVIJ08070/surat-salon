@@ -20,21 +20,23 @@ import {
   CHECK_STYLIST_SERVICE_ASSIGNED,
   REMOVE_STYLIST_SERVICE,
   UPDATE_STYLIST,
+  FIND_STYLIST_BY_USER_ID,
 } from './stylist.query';
 
 @Injectable()
 export class StylistService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly db: DatabaseService) { }
 
-  async create(dto: CreateStylistDto, role: UserRole): Promise<IStylist> {
+  async create(dto: CreateStylistDto, role: UserRole, userId?: number): Promise<IStylist> {
     const commissionRate = dto.commissionRate ?? 0;
     await this.db.execute(INSERT_STYLIST, [
-      dto.name,
-      dto.specialisation,
-      dto.workingDays,
-      dto.shiftStart,
-      dto.shiftEnd,
+      dto.name ?? null,
+      dto.specialisation ?? null,
+      dto.workingDays ?? null,
+      dto.shiftStart ?? null,
+      dto.shiftEnd ?? null,
       commissionRate,
+      userId ?? null,
     ]);
 
     const query = role === UserRole.ADMIN ? FIND_STYLIST_BY_ID_ADMIN : FIND_STYLIST_BY_ID_BASE;
@@ -56,7 +58,7 @@ export class StylistService {
     let whereSql = `WHERE status = 1`;
 
     if (specialisation) { whereSql += ` AND specialisation = ?`; params.push(specialisation); }
-    if (stylistStatus)  { whereSql += ` AND stylist_status = ?`; params.push(stylistStatus); }
+    if (stylistStatus) { whereSql += ` AND stylist_status = ?`; params.push(stylistStatus); }
 
     const countRows = await this.db.query<{ total: string }>(`SELECT COUNT(*) AS total FROM stylists ${whereSql}`, params);
     const total = parseInt(countRows[0].total, 10);
@@ -88,12 +90,12 @@ export class StylistService {
     const fields: string[] = [];
     const params: (string | number)[] = [];
 
-    if (dto.name !== undefined)          { fields.push('name = ?');           params.push(dto.name); }
+    if (dto.name !== undefined) { fields.push('name = ?'); params.push(dto.name); }
     if (dto.specialisation !== undefined) { fields.push('specialisation = ?'); params.push(dto.specialisation); }
-    if (dto.workingDays !== undefined)   { fields.push('working_days = ?');   params.push(dto.workingDays); }
-    if (dto.shiftStart !== undefined)    { fields.push('shift_start = ?');    params.push(dto.shiftStart); }
-    if (dto.shiftEnd !== undefined)      { fields.push('shift_end = ?');      params.push(dto.shiftEnd); }
-    if (dto.commissionRate !== undefined){ fields.push('commission_rate = ?');params.push(dto.commissionRate); }
+    if (dto.workingDays !== undefined) { fields.push('working_days = ?'); params.push(dto.workingDays); }
+    if (dto.shiftStart !== undefined) { fields.push('shift_start = ?'); params.push(dto.shiftStart); }
+    if (dto.shiftEnd !== undefined) { fields.push('shift_end = ?'); params.push(dto.shiftEnd); }
+    if (dto.commissionRate !== undefined) { fields.push('commission_rate = ?'); params.push(dto.commissionRate); }
     if (dto.stylistStatus !== undefined) { fields.push('stylist_status = ?'); params.push(dto.stylistStatus); }
 
     if (fields.length) {
@@ -134,5 +136,11 @@ export class StylistService {
     if (!rows.length) throw new NotFoundException(`Service ${serviceId} is not assigned to stylist ${stylistId}`);
     await this.db.execute(REMOVE_STYLIST_SERVICE, [stylistId, serviceId]);
     return { message: 'Service removed from stylist successfully' };
+  }
+
+  async findByUserId(userId: number): Promise<IStylist> {
+    const rows = await this.db.query<IStylist>(FIND_STYLIST_BY_USER_ID, [userId]);
+    if (!rows.length) throw new NotFoundException('Stylist profile not found for this user');
+    return rows[0];
   }
 }
