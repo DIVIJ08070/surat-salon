@@ -109,7 +109,7 @@ export const FIND_STYLIST_DAILY_SCHEDULE = `
 export const COMPLETE_APPOINTMENT_SERVICE = `
   UPDATE appointment_services
   SET appointment_service_status = ?
-  WHERE appointment_id = ? AND service_id = ? AND status = 1
+  WHERE id = ? AND status = 1
 `;
 
 export const COUNT_PENDING_APPOINTMENT_SERVICES = `

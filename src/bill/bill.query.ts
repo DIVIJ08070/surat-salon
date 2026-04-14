@@ -20,7 +20,7 @@ export const INSERT_BILL = `
 `;
 
 export const BILL_DETAIL_SELECT = `
-  SELECT b.id, b.bill_number, b.subtotal, b.discount, b.tax, b.total,
+  SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
          b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date, a.start_time,
          c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
@@ -32,7 +32,7 @@ export const BILL_DETAIL_SELECT = `
 `;
 
 export const FIND_BILL_BY_NUMBER = `
-  SELECT b.id, b.bill_number, b.subtotal, b.discount, b.tax, b.total,
+  SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
          b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date, a.start_time,
          c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
@@ -45,7 +45,7 @@ export const FIND_BILL_BY_NUMBER = `
 `;
 
 export const FIND_BILL_BY_ID = `
-  SELECT b.id, b.bill_number, b.subtotal, b.discount, b.tax, b.total,
+  SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
          b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date, a.start_time,
          c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
@@ -58,7 +58,7 @@ export const FIND_BILL_BY_ID = `
 `;
 
 export const FIND_BILL_BY_APPOINTMENT = `
-  SELECT b.id, b.bill_number, b.subtotal, b.discount, b.tax, b.total,
+  SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
          b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date, a.start_time,
          c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
@@ -75,7 +75,7 @@ export const COUNT_ALL_BILLS = `
 `;
 
 export const FIND_ALL_BILLS = (whereSql: string) => `
-  SELECT b.id, b.bill_number, b.subtotal, b.discount, b.tax, b.total,
+  SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
          b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date,
          c.name AS customer_name, c.customer_code,

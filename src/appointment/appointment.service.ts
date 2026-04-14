@@ -254,9 +254,9 @@ export class AppointmentService {
 
   // ─── MARK SERVICE AS COMPLETED ───────────────────────────────────────────────
 
-  async completeService(appointmentId: number, serviceId: number): Promise<{ message: string }> {
+  async completeService(appointmentId: number, appointmentServiceId: number): Promise<{ message: string }> {
     await this.findOne(appointmentId);
-    await this.db.execute(COMPLETE_APPOINTMENT_SERVICE, [AppointmentServiceStatus.COMPLETED, appointmentId, serviceId]);
+    await this.db.execute(COMPLETE_APPOINTMENT_SERVICE, [AppointmentServiceStatus.COMPLETED, appointmentServiceId]);
     const pendingRows = await this.db.query<{ cnt: string }>(COUNT_PENDING_APPOINTMENT_SERVICES, [appointmentId]);
     if (parseInt(pendingRows[0].cnt, 10) === 0) {
       const conn = await this.db.getConnection();
