@@ -1,99 +1,126 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# ✂️ SuratSalon Hub API 
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+[![NestJS](https://img.shields.io/badge/nestjs-%23E0234E.svg?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![MySQL](https://img.shields.io/badge/mysql-%2300f.svg?style=for-the-badge&logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Swagger](https://img.shields.io/badge/-Swagger-%23Clojure?style=for-the-badge&logo=swagger&logoColor=white)](http://localhost:3000/api/docs)
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+SuratSalon Hub is a comprehensive Backend API designed for modern salon and spa management. Built with **NestJS** and powered by raw **MySQL** performance, this system handles everything from appointment scheduling and stylist management to automated billing and detailed reporting.
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 🚀 Key Features
 
-## Project setup
+- 🔐 **Secure Authentication**: JWT-based auth with Access & Refresh tokens, secure HTTP-only cookies, and Role-Based Access Control (RBAC).
+- 📅 **Smart Appointments**: Advance booking system with real-time availability checks and conflict resolution.
+- 🕒 **Dynamic Time Slots**: Automated generation of stylist availability slots with support for breaks and leaves.
+- 👥 **Customer Management**: Detailed profiles, service history, and preferences tracking.
+- 💇 **Stylist Portal**: Manage stylist schedules, availability, and leave requests.
+- 💰 **Automated Billing**: Instant bill generation for completed services with tax and discount support.
+- 📊 **Rich Reporting**: Daily and monthly business insights including revenue, service popularity, and stylist performance.
+- ⏰ **Cron Operations**: Automated system maintenance and daily slot generation for seamless operations.
 
-```bash
-$ npm install
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: [NestJS](https://nestjs.com/) (Node.js)
+- **Database**: MySQL (using `mysql2` for high-performance raw SQL queries)
+- **Documentation**: [Swagger / OpenAPI](https://swagger.io/)
+- **Security**: 
+  - JWT (JSON Web Tokens)
+  - Bcrypt for password hashing
+  - RBAC (Role-Based Access Control)
+- **Validation**: [class-validator](https://github.com/typestack/class-validator) & [class-transformer](https://github.com/typestack/class-transformer)
+
+---
+
+## 📁 Project Structure
+
+```text
+src/
+├── appointment/      # Appointment booking and management logic
+├── auth/             # Authentication & Authorization (JWT, Middleware, Guards)
+├── bill/             # Billing and invoice generation
+├── common/           # Shared filters, interceptors, and decorators
+├── cron/             # Automated background tasks
+├── customer/         # Customer profile management
+├── database/         # Global Database service for raw SQL queries
+├── report/           # Business analytics and performance reports
+├── service/          # Salon services and pricing management
+├── stylist/          # Stylist profiles and portfolio
+├── stylist-leave/    # Leave management system for staff
+├── time-slot/        # Availability slot engine
+└── user/             # User and staff account management
 ```
 
-## Compile and run the project
+---
 
+## ⚙️ Project Setup
+
+### 1. Prerequisites
+- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [MySQL](https://www.mysql.com/) (v8.0+ recommended)
+
+### 2. Installation
 ```bash
-# development
-$ npm run start
+# Clone the repository
+git clone <repository-url>
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+# Install dependencies
+npm install
 ```
 
-## Run tests
+### 3. Environment Configuration
+Create a `.env` file in the root directory and configure the following variables:
+```env
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+DB_NAME=surat_salon
 
-```bash
-# unit tests
-$ npm run test
+JWT_ACCESS_SECRET=your_access_secret
+JWT_ACCESS_EXPIRATION=15m
+JWT_REFRESH_SECRET=your_refresh_secret
+JWT_REFRESH_EXPIRATION=7d
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+PORT=3000
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
+### 4. Database Setup
+Import the provided SQL schema to initialize your database structure:
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+mysql -u source_user -p surat_salon < salon.sql
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## 🏃 Running the Project
 
-Check out a few resources that may come in handy when working with NestJS:
+```bash
+# Development mode
+npm run start:dev
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+# Production mode
+npm run build
+npm run start:prod
+```
 
-## Support
+---
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## 📖 API Documentation
 
-## Stay in touch
+The API comes with built-in Swagger documentation. Once the server is running, you can access the interactive UI at:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+🔗 [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
 
-## License
+---
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
-# surat-salon
+## 🛠️ Performance & Scalability
+This project utilizes a **Raw SQL** approach instead of a heavy ORM for maximum performance in high-concurrency scenarios like slot availability lookups and report generation. All queries are pre-optimized and handled through a global `DatabaseService`.
+
+---
+
+## 📄 License
+This project is [UNLICENSED](LICENSE).
