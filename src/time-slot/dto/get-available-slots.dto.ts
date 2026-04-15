@@ -1,6 +1,6 @@
-import { IsInt, IsDateString, IsNotEmpty } from 'class-validator';
+import { IsInt, IsDateString, IsNotEmpty, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GetAvailableSlotsDto {
   @ApiProperty({ description: 'The ID of the stylist' })
@@ -13,4 +13,10 @@ export class GetAvailableSlotsDto {
   @IsNotEmpty()
   @IsDateString()
   date!: string;
+
+  @ApiPropertyOptional({ description: 'Total duration needed in minutes' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  durationMinutes?: number;
 }

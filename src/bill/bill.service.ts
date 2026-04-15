@@ -7,6 +7,7 @@ import {
   GENERATE_BILL_NUMBER,
   CHECK_APPOINTMENT_FOR_BILL,
   CHECK_BILL_ALREADY_EXISTS,
+  GET_STYLIST_COMMISSION_RATE,
   INSERT_BILL,
   FIND_BILL_BY_NUMBER,
   FIND_BILL_BY_ID,
@@ -25,6 +26,7 @@ interface BillDetailRow extends IBill {
   customer_phone: string;
   customer_code: string;
   stylist_name: string;
+  commission_amount: number;
 }
 
 @Injectable()
@@ -64,6 +66,14 @@ export class BillService {
 
     if (total < 0) throw new BadRequestException('Discount cannot exceed the subtotal amount');
 
+    // Fetch stylist commission rate for this appointment
+    const commissionRows = await this.db.query<{ commission_rate: number | null }>(
+      GET_STYLIST_COMMISSION_RATE,
+      [dto.appointmentId],
+    );
+    const commissionRate = Number(commissionRows[0]?.commission_rate ?? 0);
+    const commissionAmount = parseFloat(((subtotal * commissionRate) / 100).toFixed(2));
+
     const billNumber = await this.generateBillNumber();
 
     await this.db.execute(INSERT_BILL, [
@@ -73,6 +83,7 @@ export class BillService {
       discount,
       tax,
       total,
+      commissionAmount,
       BillStatus.PENDING,
     ]);
 

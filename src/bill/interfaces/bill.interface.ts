@@ -8,6 +8,7 @@ export interface IBill {
   discount: number;
   tax: number;
   total: number;
+  commission_amount: number;
   payment_method: PaymentMethod | null;
   bill_status: BillStatus;
   paid_at: string | null;

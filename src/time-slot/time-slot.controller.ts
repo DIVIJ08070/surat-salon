@@ -13,6 +13,7 @@ import { TimeSlotService } from './time-slot.service';
 import { GenerateSlotsDto } from './dto/generate-slots.dto';
 import { BulkGenerateSlotsDto } from './dto/bulk-generate-slots.dto';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
+import { GetAvailableDatesDto } from './dto/get-available-dates.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UserRole, SlotStatus } from 'src/common/enums';
 
@@ -64,11 +65,18 @@ export class TimeSlotController {
       limit: limit ? parseInt(limit, 10) : 10,
     });
   }
-    // GET /time-slots/available?stylistId=&date=  — used by appointment booking UI
+    // GET /time-slots/available?stylistId=&date=&durationMinutes=  — used by appointment booking UI
   @Get('available')
-  @ApiOperation({ summary: 'Get all available slots for a stylist on a specific date' })
+  @ApiOperation({ summary: 'Get all available slots (as blocks) for a stylist on a specific date' })
   getAvailable(@Query() dto: GetAvailableSlotsDto): Promise<object[]> {
-    return this.timeSlotService.getAvailableSlots(dto.stylistId, dto.date);
+    return this.timeSlotService.getAvailableSlots(dto.stylistId, dto.date, dto.durationMinutes);
+  }
+
+  // GET /time-slots/available-dates?stylistId=&durationMinutes=&month=&year= — used for smart calendar
+  @Get('available-dates')
+  @ApiOperation({ summary: 'Get all dates in a month that have available blocks for a given duration' })
+  getAvailableDates(@Query() dto: GetAvailableDatesDto): Promise<string[]> {
+    return this.timeSlotService.getAvailableDates(dto.stylistId, dto.durationMinutes, dto.month, dto.year);
   }
 
 

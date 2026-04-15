@@ -52,26 +52,59 @@ export class StylistService {
     stylistStatus?: StylistStatus,
     page = 1,
     limit = 10,
+    serviceIds?: number[],
   ): Promise<{ data: IStylist[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
     const offset = (page - 1) * limit;
     const params: (string | number)[] = [];
-    let whereSql = `WHERE status = 1`;
+    let whereSql = `WHERE s.status = 1`;
+    let joinSql = '';
+    let groupSql = '';
+    let havingSql = '';
 
-    if (specialisation) { whereSql += ` AND specialisation = ?`; params.push(specialisation); }
-    if (stylistStatus) { whereSql += ` AND stylist_status = ?`; params.push(stylistStatus); }
+    if (specialisation) { whereSql += ` AND s.specialisation = ?`; params.push(specialisation); }
+    if (stylistStatus) { whereSql += ` AND s.stylist_status = ?`; params.push(stylistStatus); }
 
-    const countRows = await this.db.query<{ total: string }>(`SELECT COUNT(*) AS total FROM stylists ${whereSql}`, params);
-    const total = parseInt(countRows[0].total, 10);
+    if (serviceIds && serviceIds.length > 0) {
+      const placeholders = serviceIds.map(() => '?').join(',');
+      joinSql = `JOIN stylist_services ss ON ss.stylist_id = s.id AND ss.status = 1`;
+      whereSql += ` AND ss.service_id IN (${placeholders})`;
+      params.push(...serviceIds);
+      groupSql = `GROUP BY s.id`;
+      havingSql = `HAVING COUNT(DISTINCT ss.service_id) = ${serviceIds.length}`;
+    }
 
-    const baseQuery = role === UserRole.ADMIN ? FIND_ALL_STYLISTS_ADMIN : FIND_ALL_STYLISTS_BASE;
-    // We need to inject the whereSql into the base queries or handle them dynamically.
-    // For now, I'll use inline for list views with complex filters but use query constants where possible.
+    // Count is more complex with GROUP BY / HAVING
+    const countSql = `
+      SELECT COUNT(*) as total FROM (
+        SELECT s.id 
+        FROM stylists s 
+        ${joinSql} 
+        ${whereSql} 
+        ${groupSql} 
+        ${havingSql}
+      ) as filtered_stylists
+    `;
+
+    const countRows = await this.db.query<{ total: string }>(countSql, params);
+    const total = parseInt(countRows[0]?.total || '0', 10);
+
     const cols = role === UserRole.ADMIN
-      ? 'id, name, specialisation, working_days, shift_start, shift_end, stylist_status, commission_rate, created_at'
-      : 'id, name, specialisation, working_days, shift_start, shift_end, stylist_status, created_at';
+      ? 's.id, s.name, s.specialisation, s.working_days, s.shift_start, s.shift_end, s.stylist_status, s.commission_rate, s.created_at'
+      : 's.id, s.name, s.specialisation, s.working_days, s.shift_start, s.shift_end, s.stylist_status, s.created_at';
+
+    const dataSql = `
+      SELECT ${cols} 
+      FROM stylists s 
+      ${joinSql} 
+      ${whereSql} 
+      ${groupSql} 
+      ${havingSql} 
+      ORDER BY s.name ASC 
+      LIMIT ? OFFSET ?
+    `;
 
     const data = await this.db.query<IStylist>(
-      `SELECT ${cols} FROM stylists ${whereSql} ORDER BY name ASC LIMIT ? OFFSET ?`,
+      dataSql,
       [...params, limit, offset],
     );
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };

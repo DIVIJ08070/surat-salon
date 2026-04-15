@@ -55,6 +55,7 @@ export class StylistController {
       query.stylistStatus,
       query.page,
       query.limit,
+      query.serviceIds,
     );
   }
 

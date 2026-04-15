@@ -248,7 +248,78 @@ export class TimeSlotService {
     return { message: 'Available slots removed for the date', deleted: result.affectedRows ?? 0 };
   }
 
-  async getAvailableSlots(stylistId: number, date: string): Promise<ITimeSlot[]> {
-    return this.db.query<ITimeSlot>(FIND_AVAILABLE_SLOTS, [stylistId, date]);
+  async getAvailableSlots(stylistId: number, date: string, durationMinutes?: number): Promise<ITimeSlot[]> {
+    const slots = await this.db.query<ITimeSlot>(FIND_AVAILABLE_SLOTS, [stylistId, date]);
+    
+    if (!durationMinutes || durationMinutes <= 30) {
+      return slots;
+    }
+
+    return this.findAvailableBlocks(slots, durationMinutes);
+  }
+
+  async getAvailableDates(stylistId: number, durationMinutes: number, month?: number, year?: number): Promise<string[]> {
+    const targetYear = year || new Date().getFullYear();
+    const targetMonth = month || (new Date().getMonth() + 1);
+    
+    // Format month for SQL (YYYY-MM)
+    const monthStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+    
+    // Fetch all available slots for the whole month
+    const allSlots = await this.db.query<ITimeSlot>(
+      `SELECT * FROM time_slots 
+       WHERE stylist_id = ? AND slot_date LIKE ? AND slot_status = 'available' AND status = 1
+       ORDER BY slot_date ASC, start_time ASC`,
+      [stylistId, `${monthStr}%`]
+    );
+    
+    console.log(`[Backend] Searching slots for Stylist ${stylistId} in ${monthStr}`);
+    console.log(`[Backend] Found ${allSlots.length} available slots.`);
+
+    // Group slots by date
+    const slotsByDate: Record<string, ITimeSlot[]> = {};
+    allSlots.forEach(slot => {
+      // Bulletproof date formatting (YYYY-MM-DD)
+      const d = new Date(slot.slot_date);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        
+      if (!slotsByDate[dateKey]) slotsByDate[dateKey] = [];
+      slotsByDate[dateKey].push(slot);
+    });
+
+    // Check each date for available blocks
+    const availableDates: string[] = [];
+    for (const [date, slots] of Object.entries(slotsByDate)) {
+      const blocks = this.findAvailableBlocks(slots, durationMinutes);
+      if (blocks.length > 0) {
+        availableDates.push(date);
+      }
+    }
+
+    return availableDates;
+  }
+
+  private findAvailableBlocks(slots: ITimeSlot[], durationMinutes: number): ITimeSlot[] {
+    const slotDuration = 30; // Assuming 30m slots as per current logic
+    const slotsNeeded = Math.ceil(durationMinutes / slotDuration);
+    
+    if (slotsNeeded <= 1) return slots;
+
+    const result: ITimeSlot[] = [];
+    for (let i = 0; i <= slots.length - slotsNeeded; i++) {
+        let isConsecutive = true;
+        for (let j = 0; j < slotsNeeded - 1; j++) {
+            const currentEnd = timeToMinutes(slots[i + j].end_time);
+            const nextStart = timeToMinutes(slots[i + j + 1].start_time);
+            if (currentEnd !== nextStart) {
+                isConsecutive = false;
+                break;
+            }
+        }
+        if (isConsecutive) {
+            result.push(slots[i]); // Return the start slot of the block
+        }
+    }
+    return result;
   }
 }

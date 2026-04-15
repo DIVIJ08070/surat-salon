@@ -14,14 +14,22 @@ export const CHECK_BILL_ALREADY_EXISTS = `
   SELECT id FROM bills WHERE appointment_id = ? AND status = 1
 `;
 
+export const GET_STYLIST_COMMISSION_RATE = `
+  SELECT st.commission_rate
+  FROM appointments a
+  JOIN stylists st ON st.id = a.stylist_id
+  WHERE a.id = ? AND a.status = 1
+  LIMIT 1
+`;
+
 export const INSERT_BILL = `
-  INSERT INTO bills (appointment_id, bill_number, subtotal, discount, tax, total, bill_status)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO bills (appointment_id, bill_number, subtotal, discount, tax, total, commission_amount, bill_status)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 export const BILL_DETAIL_SELECT = `
   SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
-         b.payment_method, b.bill_status, b.paid_at, b.created_at,
+         b.commission_amount, b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date, a.start_time,
          c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
          st.name AS stylist_name
@@ -33,7 +41,7 @@ export const BILL_DETAIL_SELECT = `
 
 export const FIND_BILL_BY_NUMBER = `
   SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
-         b.payment_method, b.bill_status, b.paid_at, b.created_at,
+         b.commission_amount, b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date, a.start_time,
          c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
          st.name AS stylist_name
@@ -46,7 +54,7 @@ export const FIND_BILL_BY_NUMBER = `
 
 export const FIND_BILL_BY_ID = `
   SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
-         b.payment_method, b.bill_status, b.paid_at, b.created_at,
+         b.commission_amount, b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date, a.start_time,
          c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
          st.name AS stylist_name
@@ -59,7 +67,7 @@ export const FIND_BILL_BY_ID = `
 
 export const FIND_BILL_BY_APPOINTMENT = `
   SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
-         b.payment_method, b.bill_status, b.paid_at, b.created_at,
+         b.commission_amount, b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date, a.start_time,
          c.name AS customer_name, c.phone AS customer_phone, c.customer_code,
          st.name AS stylist_name
@@ -76,7 +84,7 @@ export const COUNT_ALL_BILLS = `
 
 export const FIND_ALL_BILLS = (whereSql: string) => `
   SELECT b.id, b.bill_number, b.subtotal, b.discount AS discount_amount, b.tax AS tax_amount, b.total AS total_amount,
-         b.payment_method, b.bill_status, b.paid_at, b.created_at,
+         b.commission_amount, b.payment_method, b.bill_status, b.paid_at, b.created_at,
          a.appointment_number, a.appointment_date,
          c.name AS customer_name, c.customer_code,
          st.name AS stylist_name
