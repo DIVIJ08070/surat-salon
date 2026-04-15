@@ -12,8 +12,7 @@ export class CronService {
     private readonly timeSlotService: TimeSlotService,
   ) {}
 
-  // ─── AUTO-GENERATE SLOTS FOR NEXT MONTH ──────────────────────────────────────
-  // Runs every day at midnight to check if it's time to generate slots for next month
+  // Check daily at midnight if we need to generate slots for next month
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, { name: 'auto-generate-slots', timeZone: 'Asia/Kolkata' })
   async autoGenerateNextMonthSlots(): Promise<void> {
     const today = new Date();
@@ -26,7 +25,7 @@ export class CronService {
     const daysInMonth = lastDayOfMonth.getDate();
     const daysLeft = daysInMonth - dayOfMonth;
 
-    // Trigger only if there are 7 or fewer days left in the month
+    // Start generating next month's slots in the last week of current month
     if (daysLeft <= 7) {
       const nextMonthStart = new Date(currentYear, currentMonth + 1, 1);
       const nextMonthEnd = new Date(currentYear, currentMonth + 2, 0);
@@ -43,22 +42,24 @@ export class CronService {
           slotDurationMinutes: 30,
         });
         this.logger.log(`[CRON] Successfully generated ${result.created} slots for ${result.stylistsProcessed} stylists.`);
-      } catch (err: any) {
-        this.logger.error(`[CRON] Bulk generation failed: ${err.message}`, err.stack);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const stack = error instanceof Error ? error.stack : '';
+        this.logger.error(`[CRON] Bulk generation failed: ${message}`, stack);
       }
     } else {
       this.logger.log(`[CRON] Checked slot generation: ${daysLeft} days left in the month. No action needed.`);
     }
   }
 
-  // ─── DAILY REVENUE SUMMARY — runs every day at 11:30 PM ──────────────────────
+  // Daily revenue summary at 11:30 PM
   @Cron('30 23 * * *', { name: 'daily-revenue-summary', timeZone: 'Asia/Kolkata' })
   async runDailyRevenueSummary(): Promise<void> {
     const todayStr = new Date().toISOString().slice(0, 10);
     this.logger.log(`[CRON] Running daily revenue summary for ${todayStr}...`);
 
     try {
-      // Totals for today
+      // Get today's appointment totals
       const [summary]: any[] = await this.db.query(
         `SELECT
            COUNT(CASE WHEN appointment_status = 'completed'  THEN 1 END) AS completed,
@@ -72,7 +73,7 @@ export class CronService {
         [todayStr],
       );
 
-      // Top earning service of the day
+      // Get top earning service
       const topServiceRows: any[] =
         await this.db.query(
           `SELECT s.name AS service_name, SUM(aps.price_at_booking) AS revenue
@@ -87,7 +88,7 @@ export class CronService {
           [todayStr],
         );
 
-      // Top performing stylist of the day
+      // Get top performing stylist
       const topStylistRows: any[] =
         await this.db.query(
           `SELECT st.name AS stylist_name, COUNT(a.id) AS appointments
@@ -100,7 +101,7 @@ export class CronService {
           [todayStr],
         );
 
-      // Log the summary
+      // Log report summary
       this.logger.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   📊 DAILY REVENUE SUMMARY — ${todayStr}
@@ -112,10 +113,12 @@ export class CronService {
   🏆 Top Service           : ${topServiceRows[0]?.service_name ?? 'N/A'} (₹${Number(topServiceRows[0]?.revenue ?? 0).toFixed(2)})
   🌟 Top Stylist           : ${topStylistRows[0]?.stylist_name ?? 'N/A'} (${topStylistRows[0]?.appointments ?? 0} appts)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    } catch (err: any) {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : '';
       this.logger.error(
         `[CRON] Daily revenue summary failed for ${todayStr}`,
-        err.stack,
+        stack,
       );
     }
   }

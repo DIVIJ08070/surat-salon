@@ -4,6 +4,8 @@ import {
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
+  InternalServerErrorException,
+  HttpException,
 } from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -32,8 +34,7 @@ import {
   MARK_APPOINTMENT_NO_SHOW,
 } from './appointment.query';
 
-// ─── Typed row interfaces ────────────────────────────────────────────────────
-
+// Row interfaces
 interface AppointmentServiceRow {
   id: number;
   service_name: string;
@@ -75,23 +76,25 @@ function minutesToTime(mins: number): string {
   return `${h}:${m}:00`;
 }
 
-// ─── Service ──────────────────────────────────────────────────────────────────
-
 @Injectable()
 export class AppointmentService {
   constructor(private readonly db: DatabaseService) { }
 
-  // ─── AUTO-GENERATE APPOINTMENT NUMBER (APT-YYYY-NNN) ─────────────────────────
-
+  // We use a simple sequential number per year like APT-2024-001
   private async generateAppointmentNumber(conn: import('mysql2/promise').PoolConnection): Promise<string> {
-    const year = new Date().getFullYear();
-    const [rows] = await conn.execute(GENERATE_APPOINTMENT_NUMBER(year)) as [{ max_num: number | null }[], unknown];
-    const maxNum = Number(rows[0]?.max_num ?? 0);
-    return `APT-${year}-${String(maxNum + 1).padStart(3, '0')}`;
+    try {
+      const year = new Date().getFullYear();
+      const [rows] = await conn.execute(GENERATE_APPOINTMENT_NUMBER(year)) as [{ max_num: number | null }[], unknown];
+      const maxNum = Number(rows[0]?.max_num ?? 0);
+      return `APT-${year}-${String(maxNum + 1).padStart(3, '0')}`;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── CREATE APPOINTMENT ──────────────────────────────────────────────────────
-
+  // Create appointment
   async create(dto: CreateAppointmentDto): Promise<AppointmentDetail> {
     const todayStr = new Date().toISOString().slice(0, 10);
     if (dto.appointmentDate < todayStr) {
@@ -135,6 +138,7 @@ export class AppointmentService {
       const startMin = timeToMinutes(dto.startTime);
       const endTime = minutesToTime(startMin + slotsNeeded * slotDuration);
 
+      // Convert the total duration into a list of specific 30-minute time slots we need to block
       const expectedStartTimes: string[] = [];
       for (let i = 0; i < slotsNeeded; i++) expectedStartTimes.push(minutesToTime(startMin + i * slotDuration));
 
@@ -166,6 +170,7 @@ export class AppointmentService {
       const [newApt] = await conn.execute(FIND_APPOINTMENT_ID_BY_NUMBER, [appointmentNumber]) as [{ id: number }[], unknown];
       const appointmentId = newApt[0].id;
 
+      // Link services to the appointment and block the specific time slots in the database
       for (const svc of serviceRows) {
         await conn.execute(INSERT_APPOINTMENT_SERVICE, [appointmentId, svc.id, svc.price, svc.duration_minutes]);
       }
@@ -178,19 +183,20 @@ export class AppointmentService {
 
       await conn.commit();
       return this.findOne(appointmentId, UserRole.ADMIN);
-    } catch (err: unknown) {
+    } catch (error) {
       await conn.rollback();
-      if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: string }).code === 'ER_DUP_ENTRY') {
+      if (error instanceof HttpException) throw error;
+      if (typeof error === 'object' && error !== null && 'code' in error && (error as { code: string }).code === 'ER_DUP_ENTRY') {
         throw new ConflictException('Appointment slot conflict — another booking was made simultaneously');
       }
-      throw err;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
     } finally {
       conn.release();
     }
   }
 
-  // ─── LIST APPOINTMENTS ───────────────────────────────────────────────────────
-
+  // List appointments
   async findAll(filters: {
     customerId?: number;
     stylistId?: number;
@@ -199,108 +205,140 @@ export class AppointmentService {
     page?: number;
     limit?: number;
   }): Promise<{ data: object[]; meta: object }> {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 10;
-    const offset = (page - 1) * limit;
+    try {
+      const page = filters.page ?? 1;
+      const limit = filters.limit ?? 10;
+      const offset = (page - 1) * limit;
 
-    const params: (string | number)[] = [];
-    let whereSql = `WHERE a.status = 1`;
+      const params: (string | number)[] = [];
+      let whereSql = `WHERE a.status = 1`;
 
-    if (filters.customerId) {
-      whereSql += ` AND a.customer_id = ?`;
-      params.push(filters.customerId);
-    }
-    if (filters.stylistId) {
-      whereSql += ` AND a.stylist_id = ?`;
-      params.push(filters.stylistId);
-    }
-    if (filters.appointmentStatus) {
-      whereSql += ` AND a.appointment_status = ?`;
-      params.push(filters.appointmentStatus);
-    }
-    if (filters.date) {
-      whereSql += ` AND a.appointment_date = ?`;
-      params.push(filters.date);
-    }
+      if (filters.customerId) {
+        whereSql += ` AND a.customer_id = ?`;
+        params.push(filters.customerId);
+      }
+      if (filters.stylistId) {
+        whereSql += ` AND a.stylist_id = ?`;
+        params.push(filters.stylistId);
+      }
+      if (filters.appointmentStatus) {
+        whereSql += ` AND a.appointment_status = ?`;
+        params.push(filters.appointmentStatus);
+      }
+      if (filters.date) {
+        whereSql += ` AND a.appointment_date = ?`;
+        params.push(filters.date);
+      }
 
-    const countRows = await this.db.query<{ total: string }>(
-      `SELECT COUNT(*) AS total FROM appointments a ${whereSql}`, params,
-    );
-    const total = parseInt(countRows[0].total, 10);
+      const countRows = await this.db.query<{ total: string }>(
+        `SELECT COUNT(*) AS total FROM appointments a ${whereSql}`, params,
+      );
+      const total = parseInt(countRows[0].total, 10);
 
-    const data = await this.db.query<AppointmentRow>(
-      FIND_ALL_APPOINTMENTS(whereSql),
-      [...params, limit, offset],
-    );
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+      const data = await this.db.query<AppointmentRow>(
+        FIND_ALL_APPOINTMENTS(whereSql),
+        [...params, limit, offset],
+      );
+      return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── GET ONE APPOINTMENT (with services) ─────────────────────────────────────
-
+  // Get one appointment
   async findOne(id: number, _role?: UserRole): Promise<AppointmentDetail> {
-    const rows = await this.db.query<AppointmentRow>(FIND_APPOINTMENT_BY_ID, [id]);
-    if (!rows.length) throw new NotFoundException(`Appointment with id ${id} not found`);
+    try {
+      const rows = await this.db.query<AppointmentRow>(FIND_APPOINTMENT_BY_ID, [id]);
+      if (!rows.length) throw new NotFoundException(`Appointment with id ${id} not found`);
 
-    const services = await this.db.query<AppointmentServiceRow>(FIND_APPOINTMENT_SERVICES, [id]);
-    return { ...rows[0], services };
-  }
-
-  // ─── STYLIST DAILY SCHEDULE ──────────────────────────────────────────────────
-  // Stylists can only see their own schedule
-
-  async getDailySchedule(stylistId: number, date: string): Promise<AppointmentDetail[]> {
-    const appointments = await this.db.query<AppointmentRow>(FIND_STYLIST_DAILY_SCHEDULE, [stylistId, date]);
-    
-    const result: AppointmentDetail[] = [];
-    for (const apt of appointments) {
-      const services = await this.db.query<AppointmentServiceRow>(FIND_APPOINTMENT_SERVICES, [apt.id]);
-      result.push({ ...apt, services });
+      const services = await this.db.query<AppointmentServiceRow>(FIND_APPOINTMENT_SERVICES, [id]);
+      return { ...rows[0], services };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
     }
-    return result;
   }
 
-  // ─── MARK SERVICE AS COMPLETED ───────────────────────────────────────────────
+  // Stylist daily schedule
+  async getDailySchedule(stylistId: number, date: string): Promise<AppointmentDetail[]> {
+    try {
+      const appointments = await this.db.query<AppointmentRow>(FIND_STYLIST_DAILY_SCHEDULE, [stylistId, date]);
+      
+      const result: AppointmentDetail[] = [];
+      for (const apt of appointments) {
+        const services = await this.db.query<AppointmentServiceRow>(FIND_APPOINTMENT_SERVICES, [apt.id]);
+        result.push({ ...apt, services });
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
+  }
 
+  // Mark service as completed
   async completeService(appointmentId: number, appointmentServiceId: number): Promise<{ message: string }> {
-    await this.findOne(appointmentId);
-    await this.db.execute(COMPLETE_APPOINTMENT_SERVICE, [AppointmentServiceStatus.COMPLETED, appointmentServiceId]);
-    const pendingRows = await this.db.query<{ cnt: string }>(COUNT_PENDING_APPOINTMENT_SERVICES, [appointmentId]);
-    if (parseInt(pendingRows[0].cnt, 10) === 0) {
+    try {
+      await this.findOne(appointmentId);
+      await this.db.execute(COMPLETE_APPOINTMENT_SERVICE, [AppointmentServiceStatus.COMPLETED, appointmentServiceId]);
+      
+      // If this was the last pending service, we automatically complete the whole appointment
+      const pendingRows = await this.db.query<{ cnt: string }>(COUNT_PENDING_APPOINTMENT_SERVICES, [appointmentId]);
+      if (parseInt(pendingRows[0].cnt, 10) === 0) {
+        const conn = await this.db.getConnection();
+        await conn.beginTransaction();
+        try {
+          await conn.execute(COMPLETE_APPOINTMENT, [AppointmentStatus.COMPLETED, appointmentId]);
+          await conn.execute(RELEASE_APPOINTMENT_SLOTS, [appointmentId]);
+          await conn.commit();
+        } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
+        return { message: 'Service marked complete. All services done — appointment completed and slots released.' };
+      }
+      return { message: 'Service marked as completed' };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
+  }
+
+  // Cancel appointment
+  async cancel(id: number): Promise<{ message: string }> {
+    try {
+      const apt = await this.findOne(id);
+      if (apt.appointment_status === AppointmentStatus.COMPLETED) throw new BadRequestException('Cannot cancel a completed appointment');
+      if (apt.appointment_status === AppointmentStatus.CANCELLED) throw new BadRequestException('Appointment is already cancelled');
+
       const conn = await this.db.getConnection();
       await conn.beginTransaction();
       try {
-        await conn.execute(COMPLETE_APPOINTMENT, [AppointmentStatus.COMPLETED, appointmentId]);
-        await conn.execute(RELEASE_APPOINTMENT_SLOTS, [appointmentId]);
+        await conn.execute(CANCEL_APPOINTMENT, [AppointmentStatus.CANCELLED, id]);
+        await conn.execute(RELEASE_APPOINTMENT_SLOTS, [id]);
         await conn.commit();
       } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
-      return { message: 'Service marked complete. All services done — appointment completed and slots released.' };
+      return { message: 'Appointment cancelled and time slots released' };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
     }
-    return { message: 'Service marked as completed' };
   }
 
-  // ─── CANCEL APPOINTMENT ──────────────────────────────────────────────────────
-
-  async cancel(id: number): Promise<{ message: string }> {
-    const apt = await this.findOne(id);
-    if (apt.appointment_status === AppointmentStatus.COMPLETED) throw new BadRequestException('Cannot cancel a completed appointment');
-    if (apt.appointment_status === AppointmentStatus.CANCELLED) throw new BadRequestException('Appointment is already cancelled');
-
-    const conn = await this.db.getConnection();
-    await conn.beginTransaction();
-    try {
-      await conn.execute(CANCEL_APPOINTMENT, [AppointmentStatus.CANCELLED, id]);
-      await conn.execute(RELEASE_APPOINTMENT_SLOTS, [id]);
-      await conn.commit();
-    } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
-    return { message: 'Appointment cancelled and time slots released' };
-  }
-
-  // ─── MARK AS NO-SHOW ─────────────────────────────────────────────────────────
-
+  // Mark as no-show
   async markNoShow(id: number): Promise<{ message: string }> {
-    const apt = await this.findOne(id);
-    if (apt.appointment_status !== AppointmentStatus.SCHEDULED) throw new BadRequestException('Only SCHEDULED appointments can be marked as no-show');
-    await this.db.execute(MARK_APPOINTMENT_NO_SHOW, [AppointmentStatus.NO_SHOW, id]);
-    return { message: 'Appointment marked as no-show' };
+    try {
+      const apt = await this.findOne(id);
+      if (apt.appointment_status !== AppointmentStatus.SCHEDULED) throw new BadRequestException('Only SCHEDULED appointments can be marked as no-show');
+      await this.db.execute(MARK_APPOINTMENT_NO_SHOW, [AppointmentStatus.NO_SHOW, id]);
+      return { message: 'Appointment marked as no-show' };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit, Logger, InternalServerErrorException, HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createPool, Pool, PoolConnection, ResultSetHeader } from 'mysql2/promise';
 
@@ -31,25 +31,43 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('MySQL connection pool closed');
   }
 
-  // ─── SELECT — returns typed rows ─────────────────────────────────────────────
+  // SELECT (returns rows)
   async query<T = Record<string, SqlParam>>(
     sql: string,
     params: SqlParam[] = [],
   ): Promise<T[]> {
-    // Use pool.query (text protocol) instead of pool.execute (binary/prepared)
-    // because mysql2 prepared statements reject LIMIT/OFFSET as bound parameters
-    const [rows] = await this.pool.query(sql, params);
-    return rows as T[];
+    try {
+      // Use query (text protocol) instead of execute (binary/prepared) because 
+      // mysql2 prepared statements reject LIMIT/OFFSET as bound parameters
+      const [rows] = await this.pool.query(sql, params);
+      return rows as T[];
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── INSERT / UPDATE / DELETE ─────────────────────────────────────────────────
+  // INSERT / UPDATE / DELETE
   async execute(sql: string, params: SqlParam[] = []): Promise<ResultSetHeader> {
-    const [result] = await this.pool.execute(sql, params);
-    return result as ResultSetHeader;
+    try {
+      const [result] = await this.pool.execute(sql, params);
+      return result as ResultSetHeader;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── Get connection for transactions ─────────────────────────────────────────
+  // Get connection for transactions
   async getConnection(): Promise<PoolConnection> {
-    return this.pool.getConnection();
+    try {
+      return this.pool.getConnection();
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 }

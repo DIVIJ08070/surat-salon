@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, InternalServerErrorException, HttpException } from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import { GenerateSlotsDto } from './dto/generate-slots.dto';
 import { BulkGenerateSlotsDto } from './dto/bulk-generate-slots.dto';
@@ -13,11 +13,12 @@ import {
   FIND_TIME_SLOT_BY_ID,
   REMOVE_AVAILABLE_SLOTS_FOR_DATE,
   FIND_AVAILABLE_SLOTS,
+  COUNT_TIME_SLOTS_WITH_FILTERS,
+  FIND_AVAILABLE_SLOTS_IN_MONTH,
 } from './time-slot.query';
 import { FIND_ALL_ACTIVE_STYLIST_IDS } from 'src/stylist/stylist.query';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
+// Helpers for time and date math
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
@@ -30,6 +31,7 @@ function minutesToTime(mins: number): string {
 }
 
 function getDayFromDate(dateStr: string): number {
+  // We use T12:00:00Z to make sure we stay on the same day regardless of local timezone
   const date = new Date(dateStr + 'T12:00:00Z'); 
   return date.getUTCDay();
 }
@@ -53,6 +55,7 @@ const DAY_NAME_TO_NUM: Record<string, number> = {
 };
 
 function parseWorkingDays(workingDays: string | null | undefined): Set<number> {
+  // If nothing is set, we assume they work every day
   if (!workingDays?.trim()) return new Set([0, 1, 2, 3, 4, 5, 6]);
   const nums = new Set<number>();
   for (const token of workingDays.split(/[,\s]+/)) {
@@ -63,8 +66,6 @@ function parseWorkingDays(workingDays: string | null | undefined): Set<number> {
   }
   return nums.size > 0 ? nums : new Set([0, 1, 2, 3, 4, 5, 6]);
 }
-
-// ─── TimeSlot row returned by findAll / findOne ────────────────────────────────
 
 interface TimeSlotRow {
   id: number;
@@ -78,66 +79,76 @@ interface TimeSlotRow {
   appointment_id: number | null;
 }
 
-// ─── Service ──────────────────────────────────────────────────────────────────
-
 @Injectable()
 export class TimeSlotService {
   constructor(private readonly db: DatabaseService) {}
 
   async generate(dto: GenerateSlotsDto): Promise<{ message: string; created: number }> {
-    const created = await this.generateForStylist(
-      dto.stylistId,
-      dto.fromDate,
-      dto.toDate,
-      dto.slotDurationMinutes,
-    );
-    return { message: 'Time slots generated successfully', created };
+    try {
+      const created = await this.generateForStylist(
+        dto.stylistId,
+        dto.fromDate,
+        dto.toDate,
+        dto.slotDurationMinutes,
+      );
+      return { message: 'Time slots generated successfully', created };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
   async generateBulk(dto: BulkGenerateSlotsDto): Promise<{ message: string; created: number; stylistsProcessed: number }> {
-    const fromDate = dto.fromDate ?? new Date().toISOString().slice(0, 10);
-    const toDate = dto.toDate ?? addDays(fromDate, 30);
-    const slotDuration = dto.slotDurationMinutes ?? 30;
+    try {
+      const fromDate = dto.fromDate ?? new Date().toISOString().slice(0, 10);
+      const toDate = dto.toDate ?? addDays(fromDate, 30);
+      const slotDuration = dto.slotDurationMinutes ?? 30;
 
-    // Validate range once before the loop
-    const from = new Date(fromDate);
-    const to = new Date(toDate);
-    const daysDiff = Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (daysDiff > 60) {
-      throw new BadRequestException('Bulk date range cannot exceed 60 days. Please generate in smaller batches.');
-    }
-    if (fromDate > toDate) {
-      throw new BadRequestException('fromDate must be before or equal to toDate');
-    }
-
-    const stylists = await this.db.query<{ id: number }>(FIND_ALL_ACTIVE_STYLIST_IDS);
-    if (!stylists.length) {
-      return { message: 'No active stylists found to generate slots for', created: 0, stylistsProcessed: 0 };
-    }
-
-    let totalCreated = 0;
-    let failedStylists = 0;
-
-    for (const stylist of stylists) {
-      try {
-        const created = await this.generateForStylist(stylist.id, fromDate, toDate, slotDuration, true);
-        totalCreated += created;
-      } catch (error: any) {
-        failedStylists++;
-        console.error(`Error generating slots for stylist ${stylist.id}:`, error.message);
+      const from = new Date(fromDate);
+      const to = new Date(toDate);
+      const daysDiff = Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Safety check so we don't accidentally freeze the server with a massive range
+      if (daysDiff > 60) {
+        throw new BadRequestException('Bulk date range cannot exceed 60 days. Please generate in smaller batches.');
       }
-    }
+      if (fromDate > toDate) {
+        throw new BadRequestException('fromDate must be before or equal to toDate');
+      }
 
-    if (totalCreated === 0 && failedStylists === stylists.length) {
-      throw new BadRequestException('Failed to generate slots for any stylists. Check server logs for details.');
-    }
+      const stylists = await this.db.query<{ id: number }>(FIND_ALL_ACTIVE_STYLIST_IDS);
+      if (!stylists.length) {
+        return { message: 'No active stylists found to generate slots for', created: 0, stylistsProcessed: 0 };
+      }
 
-    return {
-      message: `Successfully processed ${stylists.length} stylists.`,
-      created: totalCreated,
-      stylistsProcessed: stylists.length,
-    };
+      let totalCreated = 0;
+      let failedStylists = 0;
+
+      for (const stylist of stylists) {
+        try {
+          const created = await this.generateForStylist(stylist.id, fromDate, toDate, slotDuration, true);
+          totalCreated += created;
+        } catch (error: any) {
+          failedStylists++;
+          console.error(`Error generating slots for stylist ${stylist.id}:`, error.message);
+        }
+      }
+
+      if (totalCreated === 0 && failedStylists === stylists.length) {
+        throw new BadRequestException('Failed to generate slots for any stylists. Check server logs for details.');
+      }
+
+      return {
+        message: `Successfully processed ${stylists.length} stylists.`,
+        created: totalCreated,
+        stylistsProcessed: stylists.length,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
   private async generateForStylist(
@@ -147,67 +158,74 @@ export class TimeSlotService {
     slotDurationMinutes?: number,
     isBulk = false,
   ): Promise<number> {
-    const slotDuration = slotDurationMinutes ?? 30;
+    try {
+      const slotDuration = slotDurationMinutes ?? 30;
 
-    if (slotDuration < 15 || slotDuration > 120)
-      throw new BadRequestException('slotDurationMinutes must be between 15 and 120');
-    if (fromDate > toDate)
-      throw new BadRequestException('fromDate must be before or equal to toDate');
+      if (slotDuration < 15 || slotDuration > 120)
+        throw new BadRequestException('slotDurationMinutes must be between 15 and 120');
+      if (fromDate > toDate)
+        throw new BadRequestException('fromDate must be before or equal to toDate');
 
-    const todayStr = new Date().toISOString().slice(0, 10);
-    if (!isBulk && fromDate < todayStr)
-      throw new BadRequestException(`Cannot generate slots for past dates. fromDate must be ${todayStr} or later.`);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (!isBulk && fromDate < todayStr)
+        throw new BadRequestException(`Cannot generate slots for past dates. fromDate must be ${todayStr} or later.`);
 
-    const from = new Date(fromDate);
-    const to = new Date(toDate);
-    const daysDiff = Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysDiff > 60) throw new BadRequestException('Date range cannot exceed 60 days');
+      const from = new Date(fromDate);
+      const to = new Date(toDate);
+      const daysDiff = Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysDiff > 60) throw new BadRequestException('Date range cannot exceed 60 days');
 
-    const stylistRows = await this.db.query<{ id: number; shift_start: string; shift_end: string; working_days: string }>(
-      FIND_STYLIST_SHIFT,
-      [stylistId],
-    );
-    if (!stylistRows.length) {
-      if (isBulk) return 0;
-      throw new NotFoundException(`Stylist with id ${stylistId} not found`);
-    }
-
-    const { shift_start, shift_end, working_days } = stylistRows[0];
-    const shiftStartMin = timeToMinutes(shift_start);
-    const shiftEndMin = timeToMinutes(shift_end);
-
-    if (shiftEndMin <= shiftStartMin) {
-      if (isBulk) return 0;
-      throw new BadRequestException(`Stylist ${stylistId} shift_end must be after shift_start`);
-    }
-
-    const approvedLeaves = await this.db.query<{ leave_date: string }>(
-      FIND_APPROVED_LEAVES_IN_RANGE,
-      [stylistId, fromDate, toDate],
-    );
-    const leaveDates = new Set(approvedLeaves.map(r => r.leave_date));
-    const workingDayNums = parseWorkingDays(working_days);
-
-    let created = 0;
-    for (const date of dateRange(fromDate, toDate)) {
-      if (leaveDates.has(date)) continue;
-      if (!workingDayNums.has(getDayFromDate(date))) continue;
-
-      let cursor = shiftStartMin;
-      while (cursor + slotDuration <= shiftEndMin) {
-        const startTime = minutesToTime(cursor);
-        const endTime = minutesToTime(cursor + slotDuration);
-
-        const existing = await this.db.query<{ id: number }>(CHECK_SLOT_EXISTS, [stylistId, date, startTime]);
-
-        if (!existing.length) {
-          await this.db.execute(INSERT_TIME_SLOT, [stylistId, date, startTime, endTime, SlotStatus.AVAILABLE]);
-          created++;
-        }
-        cursor += slotDuration;
+      const stylistRows = await this.db.query<{ id: number; shift_start: string; shift_end: string; working_days: string }>(
+        FIND_STYLIST_SHIFT,
+        [stylistId],
+      );
+      if (!stylistRows.length) {
+        if (isBulk) return 0;
+        throw new NotFoundException(`Stylist with id ${stylistId} not found`);
       }
+
+      const { shift_start, shift_end, working_days } = stylistRows[0];
+      const shiftStartMin = timeToMinutes(shift_start);
+      const shiftEndMin = timeToMinutes(shift_end);
+
+      if (shiftEndMin <= shiftStartMin) {
+        if (isBulk) return 0;
+        throw new BadRequestException(`Stylist ${stylistId} shift_end must be after shift_start`);
+      }
+
+      const approvedLeaves = await this.db.query<{ leave_date: string }>(
+        FIND_APPROVED_LEAVES_IN_RANGE,
+        [stylistId, fromDate, toDate],
+      );
+      const leaveDates = new Set(approvedLeaves.map(r => r.leave_date));
+      const workingDayNums = parseWorkingDays(working_days);
+
+      let created = 0;
+      for (const date of dateRange(fromDate, toDate)) {
+        // Skip if the stylist is on leave or it's their day off
+        if (leaveDates.has(date)) continue;
+        if (!workingDayNums.has(getDayFromDate(date))) continue;
+
+        let cursor = shiftStartMin;
+        while (cursor + slotDuration <= shiftEndMin) {
+          const startTime = minutesToTime(cursor);
+          const endTime = minutesToTime(cursor + slotDuration);
+
+          const existing = await this.db.query<{ id: number }>(CHECK_SLOT_EXISTS, [stylistId, date, startTime]);
+
+          if (!existing.length) {
+            await this.db.execute(INSERT_TIME_SLOT, [stylistId, date, startTime, endTime, SlotStatus.AVAILABLE]);
+            created++;
+          }
+          cursor += slotDuration;
+        }
+      }
+      return created;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
     }
-    return created;
   }
 
   async findAll(filters: {
@@ -217,109 +235,137 @@ export class TimeSlotService {
     page?: number;
     limit?: number;
   }): Promise<{ data: TimeSlotRow[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 10;
-    const offset = (page - 1) * limit;
-    const params: (string | number)[] = [];
-    let whereSql = `WHERE ts.status = 1`;
+    try {
+      const page = filters.page ?? 1;
+      const limit = filters.limit ?? 10;
+      const offset = (page - 1) * limit;
+      const params: (string | number)[] = [];
+      let whereSql = `WHERE ts.status = 1`;
 
-    if (filters.stylistId) { whereSql += ` AND ts.stylist_id = ?`; params.push(filters.stylistId); }
-    if (filters.date)      { whereSql += ` AND ts.slot_date = ?`;  params.push(filters.date); }
-    if (filters.slotStatus){ whereSql += ` AND ts.slot_status = ?`;params.push(filters.slotStatus); }
+      if (filters.stylistId) { whereSql += ` AND ts.stylist_id = ?`; params.push(filters.stylistId); }
+      if (filters.date)      { whereSql += ` AND ts.slot_date = ?`;  params.push(filters.date); }
+      if (filters.slotStatus){ whereSql += ` AND ts.slot_status = ?`;params.push(filters.slotStatus); }
 
-    const countRows = await this.db.query<{ total: string }>(`SELECT COUNT(*) AS total FROM time_slots ts ${whereSql}`, params);
-    const total = parseInt(countRows[0].total, 10);
+      const countRows = await this.db.query<{ total: string }>(COUNT_TIME_SLOTS_WITH_FILTERS(whereSql), params);
+      const total = parseInt(countRows[0].total, 10);
 
-    const data = await this.db.query<TimeSlotRow>(
-      FIND_ALL_TIME_SLOTS(whereSql),
-      [...params, limit, offset],
-    );
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+      const data = await this.db.query<TimeSlotRow>(
+        FIND_ALL_TIME_SLOTS(whereSql),
+        [...params, limit, offset],
+      );
+      return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
   async findOne(id: number): Promise<TimeSlotRow> {
-    const rows = await this.db.query<TimeSlotRow>(FIND_TIME_SLOT_BY_ID, [id]);
-    if (!rows.length) throw new NotFoundException(`Time slot with id ${id} not found`);
-    return rows[0];
+    try {
+      const rows = await this.db.query<TimeSlotRow>(FIND_TIME_SLOT_BY_ID, [id]);
+      if (!rows.length) throw new NotFoundException(`Time slot with id ${id} not found`);
+      return rows[0];
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
   async removeForDate(stylistId: number, date: string): Promise<{ message: string; deleted: number }> {
-    const result = await this.db.execute(REMOVE_AVAILABLE_SLOTS_FOR_DATE, [stylistId, date]);
-    return { message: 'Available slots removed for the date', deleted: result.affectedRows ?? 0 };
+    try {
+      const result = await this.db.execute(REMOVE_AVAILABLE_SLOTS_FOR_DATE, [stylistId, date]);
+      return { message: 'Available slots removed for the date', deleted: result.affectedRows ?? 0 };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
   async getAvailableSlots(stylistId: number, date: string, durationMinutes?: number): Promise<ITimeSlot[]> {
-    const slots = await this.db.query<ITimeSlot>(FIND_AVAILABLE_SLOTS, [stylistId, date]);
-    
-    if (!durationMinutes || durationMinutes <= 30) {
-      return slots;
-    }
+    try {
+      const slots = await this.db.query<ITimeSlot>(FIND_AVAILABLE_SLOTS, [stylistId, date]);
+      
+      if (!durationMinutes || durationMinutes <= 30) {
+        return slots;
+      }
 
-    return this.findAvailableBlocks(slots, durationMinutes);
+      return this.findAvailableBlocks(slots, durationMinutes);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
   async getAvailableDates(stylistId: number, durationMinutes: number, month?: number, year?: number): Promise<string[]> {
-    const targetYear = year || new Date().getFullYear();
-    const targetMonth = month || (new Date().getMonth() + 1);
-    
-    // Format month for SQL (YYYY-MM)
-    const monthStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
-    
-    // Fetch all available slots for the whole month
-    const allSlots = await this.db.query<ITimeSlot>(
-      `SELECT * FROM time_slots 
-       WHERE stylist_id = ? AND slot_date LIKE ? AND slot_status = 'available' AND status = 1
-       ORDER BY slot_date ASC, start_time ASC`,
-      [stylistId, `${monthStr}%`]
-    );
-    
-    console.log(`[Backend] Searching slots for Stylist ${stylistId} in ${monthStr}`);
-    console.log(`[Backend] Found ${allSlots.length} available slots.`);
+    try {
+      const targetYear = year || new Date().getFullYear();
+      const targetMonth = month || (new Date().getMonth() + 1);
+      
+      const monthStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+      
+      const allSlots = await this.db.query<ITimeSlot>(
+        FIND_AVAILABLE_SLOTS_IN_MONTH,
+        [stylistId, `${monthStr}%`]
+      );
+      
+      const slotsByDate: Record<string, ITimeSlot[]> = {};
+      allSlots.forEach(slot => {
+        const d = new Date(slot.slot_date);
+        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          
+        if (!slotsByDate[dateKey]) slotsByDate[dateKey] = [];
+        slotsByDate[dateKey].push(slot);
+      });
 
-    // Group slots by date
-    const slotsByDate: Record<string, ITimeSlot[]> = {};
-    allSlots.forEach(slot => {
-      // Bulletproof date formatting (YYYY-MM-DD)
-      const d = new Date(slot.slot_date);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        
-      if (!slotsByDate[dateKey]) slotsByDate[dateKey] = [];
-      slotsByDate[dateKey].push(slot);
-    });
-
-    // Check each date for available blocks
-    const availableDates: string[] = [];
-    for (const [date, slots] of Object.entries(slotsByDate)) {
-      const blocks = this.findAvailableBlocks(slots, durationMinutes);
-      if (blocks.length > 0) {
-        availableDates.push(date);
+      const availableDates: string[] = [];
+      for (const [date, slots] of Object.entries(slotsByDate)) {
+        const blocks = this.findAvailableBlocks(slots, durationMinutes);
+        if (blocks.length > 0) {
+          availableDates.push(date);
+        }
       }
-    }
 
-    return availableDates;
+      return availableDates;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
+  // This looks for a sequence of 30-min slots that are long enough to fit the requested service duration
   private findAvailableBlocks(slots: ITimeSlot[], durationMinutes: number): ITimeSlot[] {
-    const slotDuration = 30; // Assuming 30m slots as per current logic
-    const slotsNeeded = Math.ceil(durationMinutes / slotDuration);
-    
-    if (slotsNeeded <= 1) return slots;
+    try {
+      const slotDuration = 30; 
+      const slotsNeeded = Math.ceil(durationMinutes / slotDuration);
+      
+      if (slotsNeeded <= 1) return slots;
 
-    const result: ITimeSlot[] = [];
-    for (let i = 0; i <= slots.length - slotsNeeded; i++) {
-        let isConsecutive = true;
-        for (let j = 0; j < slotsNeeded - 1; j++) {
-            const currentEnd = timeToMinutes(slots[i + j].end_time);
-            const nextStart = timeToMinutes(slots[i + j + 1].start_time);
-            if (currentEnd !== nextStart) {
-                isConsecutive = false;
-                break;
-            }
-        }
-        if (isConsecutive) {
-            result.push(slots[i]); // Return the start slot of the block
-        }
+      const result: ITimeSlot[] = [];
+      for (let i = 0; i <= slots.length - slotsNeeded; i++) {
+          let isConsecutive = true;
+          for (let j = 0; j < slotsNeeded - 1; j++) {
+              const currentEnd = timeToMinutes(slots[i + j].end_time);
+              const nextStart = timeToMinutes(slots[i + j + 1].start_time);
+              if (currentEnd !== nextStart) {
+                  isConsecutive = false;
+                  break;
+              }
+          }
+          if (isConsecutive) {
+              result.push(slots[i]); 
+          }
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
     }
-    return result;
   }
 }
+

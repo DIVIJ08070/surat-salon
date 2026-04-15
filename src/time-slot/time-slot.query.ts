@@ -21,8 +21,8 @@ export const INSERT_TIME_SLOT = `
   VALUES (?, ?, ?, ?, ?)
 `;
 
-export const COUNT_ALL_TIME_SLOTS = `
-  SELECT COUNT(*) AS total FROM time_slots ts
+export const COUNT_TIME_SLOTS_WITH_FILTERS = (whereSql: string) => `
+  SELECT COUNT(*) AS total FROM time_slots ts ${whereSql}
 `;
 
 export const FIND_ALL_TIME_SLOTS = (whereSql: string) => `
@@ -55,4 +55,11 @@ export const FIND_AVAILABLE_SLOTS = `
   FROM time_slots
   WHERE stylist_id = ? AND slot_date = ? AND slot_status = 'available' AND status = 1
   ORDER BY start_time ASC
+`;
+
+export const FIND_AVAILABLE_SLOTS_IN_MONTH = `
+  SELECT id, slot_date, start_time, end_time, slot_status 
+  FROM time_slots 
+  WHERE stylist_id = ? AND slot_date LIKE ? AND slot_status = 'available' AND status = 1
+  ORDER BY slot_date ASC, start_time ASC
 `;

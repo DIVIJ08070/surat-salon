@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, InternalServerErrorException, HttpException } from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import { CreateBillDto, PayBillDto } from './dto/bill.dto';
 import { IBill } from './interfaces/bill.interface';
@@ -17,7 +17,7 @@ import {
   REFUND_BILL,
 } from './bill.query';
 
-// ─── Full bill row (joined with appointment, customer, stylist) ───────────────
+// Bill details joined with appointment, customer, stylist
 interface BillDetailRow extends IBill {
   appointment_number: string;
   appointment_date: string;
@@ -33,122 +33,164 @@ interface BillDetailRow extends IBill {
 export class BillService {
   constructor(private readonly db: DatabaseService) {}
 
-  // ─── AUTO-GENERATE BILL NUMBER (BILL-YYYY-NNN) ────────────────────────────────
+  // Generate bill number (BILL-YYYY-NNN)
 
   private async generateBillNumber(): Promise<string> {
-    const year = new Date().getFullYear();
-    const rows = await this.db.query<{ max_num: number | null }>(GENERATE_BILL_NUMBER(year));
-    const maxNum = Number(rows[0]?.max_num ?? 0);
-    return `BILL-${year}-${String(maxNum + 1).padStart(3, '0')}`;
+    try {
+      const year = new Date().getFullYear();
+      const rows = await this.db.query<{ max_num: number | null }>(GENERATE_BILL_NUMBER(year));
+      const maxNum = Number(rows[0]?.max_num ?? 0);
+      return `BILL-${year}-${String(maxNum + 1).padStart(3, '0')}`;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── CREATE BILL ──────────────────────────────────────────────────────────────
+  // Create bill
 
   async create(dto: CreateBillDto): Promise<BillDetailRow> {
-    const aptRows = await this.db.query<{ id: number; appointment_status: string; total_amount: number }>(
-      CHECK_APPOINTMENT_FOR_BILL,
-      [dto.appointmentId],
-    );
-    if (!aptRows.length) throw new NotFoundException(`Appointment with id ${dto.appointmentId} not found`);
-    if (aptRows[0].appointment_status !== AppointmentStatus.COMPLETED) {
-      throw new BadRequestException(
-        `Bill can only be generated for COMPLETED appointments. Current status: ${aptRows[0].appointment_status}`,
+    try {
+      const aptRows = await this.db.query<{ id: number; appointment_status: string; total_amount: number }>(
+        CHECK_APPOINTMENT_FOR_BILL,
+        [dto.appointmentId],
       );
+      if (!aptRows.length) throw new NotFoundException(`Appointment with id ${dto.appointmentId} not found`);
+      if (aptRows[0].appointment_status !== AppointmentStatus.COMPLETED) {
+        throw new BadRequestException(
+          `Bill can only be generated for COMPLETED appointments. Current status: ${aptRows[0].appointment_status}`,
+        );
+      }
+
+      const existing = await this.db.query<{ id: number }>(CHECK_BILL_ALREADY_EXISTS, [dto.appointmentId]);
+      if (existing.length) throw new ConflictException(`A bill already exists for appointment ${dto.appointmentId}`);
+
+      const subtotal = Number(aptRows[0].total_amount);
+      const discount = dto.discount ?? 0;
+      const tax = dto.tax ?? 0;
+      const total = subtotal - discount + tax;
+
+      if (total < 0) throw new BadRequestException('Discount cannot exceed the subtotal amount');
+
+      // Fetch stylist commission rate for this appointment
+      const commissionRows = await this.db.query<{ commission_rate: number | null }>(
+        GET_STYLIST_COMMISSION_RATE,
+        [dto.appointmentId],
+      );
+      const commissionRate = Number(commissionRows[0]?.commission_rate ?? 0);
+      const commissionAmount = parseFloat(((subtotal * commissionRate) / 100).toFixed(2));
+
+      const billNumber = await this.generateBillNumber();
+
+      await this.db.execute(INSERT_BILL, [
+        dto.appointmentId,
+        billNumber,
+        subtotal,
+        discount,
+        tax,
+        total,
+        commissionAmount,
+        BillStatus.PENDING,
+      ]);
+
+      const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_NUMBER, [billNumber]);
+      return rows[0];
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
     }
-
-    const existing = await this.db.query<{ id: number }>(CHECK_BILL_ALREADY_EXISTS, [dto.appointmentId]);
-    if (existing.length) throw new ConflictException(`A bill already exists for appointment ${dto.appointmentId}`);
-
-    const subtotal = Number(aptRows[0].total_amount);
-    const discount = dto.discount ?? 0;
-    const tax = dto.tax ?? 0;
-    const total = subtotal - discount + tax;
-
-    if (total < 0) throw new BadRequestException('Discount cannot exceed the subtotal amount');
-
-    // Fetch stylist commission rate for this appointment
-    const commissionRows = await this.db.query<{ commission_rate: number | null }>(
-      GET_STYLIST_COMMISSION_RATE,
-      [dto.appointmentId],
-    );
-    const commissionRate = Number(commissionRows[0]?.commission_rate ?? 0);
-    const commissionAmount = parseFloat(((subtotal * commissionRate) / 100).toFixed(2));
-
-    const billNumber = await this.generateBillNumber();
-
-    await this.db.execute(INSERT_BILL, [
-      dto.appointmentId,
-      billNumber,
-      subtotal,
-      discount,
-      tax,
-      total,
-      commissionAmount,
-      BillStatus.PENDING,
-    ]);
-
-    const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_NUMBER, [billNumber]);
-    return rows[0];
   }
 
-  // ─── PAY A BILL ───────────────────────────────────────────────────────────────
+  // Pay a bill
 
   async pay(id: number, dto: PayBillDto): Promise<BillDetailRow> {
-    const bill = await this.findOne(id);
-    if (bill.bill_status === BillStatus.PAID) throw new BadRequestException('Bill is already paid');
-    if (bill.bill_status === BillStatus.REFUNDED) throw new BadRequestException('Cannot pay a refunded bill');
+    try {
+      const bill = await this.findOne(id);
+      if (bill.bill_status === BillStatus.PAID) throw new BadRequestException('Bill is already paid');
+      if (bill.bill_status === BillStatus.REFUNDED) throw new BadRequestException('Cannot pay a refunded bill');
 
-    await this.db.execute(PAY_BILL, [BillStatus.PAID, dto.paymentMethod, id]);
-    return this.findOne(id);
+      await this.db.execute(PAY_BILL, [BillStatus.PAID, dto.paymentMethod, id]);
+      return this.findOne(id);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── REFUND A BILL ────────────────────────────────────────────────────────────
+  // Refund a bill
 
   async refund(id: number): Promise<{ message: string }> {
-    const bill = await this.findOne(id);
-    if (bill.bill_status !== BillStatus.PAID) throw new BadRequestException('Only PAID bills can be refunded');
-    await this.db.execute(REFUND_BILL, [BillStatus.REFUNDED, id]);
-    return { message: 'Bill refunded successfully' };
+    try {
+      const bill = await this.findOne(id);
+      if (bill.bill_status !== BillStatus.PAID) throw new BadRequestException('Only PAID bills can be refunded');
+      await this.db.execute(REFUND_BILL, [BillStatus.REFUNDED, id]);
+      return { message: 'Bill refunded successfully' };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── GET BILL BY ID ───────────────────────────────────────────────────────────
+  // Get bill by ID
 
   async findOne(id: number): Promise<BillDetailRow> {
-    const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_ID, [id]);
-    if (!rows.length) throw new NotFoundException(`Bill with id ${id} not found`);
-    return rows[0];
+    try {
+      const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_ID, [id]);
+      if (!rows.length) throw new NotFoundException(`Bill with id ${id} not found`);
+      return rows[0];
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── GET BILL BY APPOINTMENT ID ───────────────────────────────────────────────
+  // Get bill by appointment ID
 
   async findByAppointment(appointmentId: number): Promise<BillDetailRow> {
-    const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_APPOINTMENT, [appointmentId]);
-    if (!rows.length) throw new NotFoundException(`No bill found for appointment ${appointmentId}`);
-    return rows[0];
+    try {
+      const rows = await this.db.query<BillDetailRow>(FIND_BILL_BY_APPOINTMENT, [appointmentId]);
+      if (!rows.length) throw new NotFoundException(`No bill found for appointment ${appointmentId}`);
+      return rows[0];
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 
-  // ─── LIST ALL BILLS ───────────────────────────────────────────────────────────
+  // List all bills
 
   async findAll(filters: {
     billStatus?: BillStatus;
     page?: number;
     limit?: number;
   }): Promise<{ data: BillDetailRow[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 10;
-    const offset = (page - 1) * limit;
-    const params: (string | number)[] = [];
-    let whereSql = `WHERE b.status = 1`;
+    try {
+      const page = filters.page ?? 1;
+      const limit = filters.limit ?? 10;
+      const offset = (page - 1) * limit;
+      const params: (string | number)[] = [];
+      let whereSql = `WHERE b.status = 1`;
 
-    if (filters.billStatus) { whereSql += ` AND b.bill_status = ?`; params.push(filters.billStatus); }
+      if (filters.billStatus) { whereSql += ` AND b.bill_status = ?`; params.push(filters.billStatus); }
 
-    const countRows = await this.db.query<{ total: string }>(`SELECT COUNT(*) AS total FROM bills b ${whereSql}`, params);
-    const total = parseInt(countRows[0].total, 10);
+      const countRows = await this.db.query<{ total: string }>(`SELECT COUNT(*) AS total FROM bills b ${whereSql}`, params);
+      const total = parseInt(countRows[0].total, 10);
 
-    const data = await this.db.query<BillDetailRow>(
-      FIND_ALL_BILLS(whereSql),
-      [...params, limit, offset],
-    );
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+      const data = await this.db.query<BillDetailRow>(
+        FIND_ALL_BILLS(whereSql),
+        [...params, limit, offset],
+      );
+      return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(message);
+    }
   }
 }
