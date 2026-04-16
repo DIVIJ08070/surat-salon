@@ -43,6 +43,7 @@ export class UserService {
     }
   }
 
+  // This version includes sensitive fields like password_hash for authentication logic
   async findWithSecretsByEmail(email: string): Promise<IUser | null> {
     try {
       const rows = await this.db.query<IUser>(FIND_USER_WITH_SECRETS_BY_EMAIL, [email]);
@@ -65,6 +66,7 @@ export class UserService {
     }
   }
 
+  // Safe version for general use (excludes passwords and sensitive hashes)
   async findByEmail(email: string): Promise<IUser | null> {
     try {
       const rows = await this.db.query<IUser>(FIND_USER_BY_EMAIL_SAFE, [email]);
@@ -87,6 +89,7 @@ export class UserService {
     }
   }
 
+  // Sets a timestamp in the future after too many failed logins
   async lockAccount(id: number, lockedUntil: Date, failedAttempts: number): Promise<void> {
     try {
       await this.db.execute(LOCK_USER_ACCOUNT, [failedAttempts, lockedUntil, id]);
