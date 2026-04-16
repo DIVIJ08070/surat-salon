@@ -3,6 +3,7 @@ create database surat_salon;
 use surat_salon;
 create table users (
   id int not null auto_increment primary key,
+  name varchar(100) not null,
   email varchar(150) not null,
   password_hash text not null,
   role enum('admin','stylist','receptionist') not null,

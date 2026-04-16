@@ -7,9 +7,9 @@
 -- 1. users (1 admin, 1 stylist, 1 receptionist)
 -- ------------------------------------------------------------
 insert into users (name, email, password_hash, role) values
-('admin user',       'admin@suratsalon.com',       '$2b$10$hashedpassword1', 'admin'),
-('stylist user',     'stylist@suratsalon.com',     '$2b$10$hashedpassword2', 'stylist'),
-('receptionist user','receptionist@suratsalon.com','$2b$10$hashedpassword3', 'receptionist');
+('admin user',       'admin@suratsalon.com',       '$2b$10$QpdL5Qdvyd9dYw.RI4TXRe02Gn4DeenOkiNcw/wv2xjIrckyhnSUS', 'admin'), -- Password: admin123
+('stylist user',     'stylist@suratsalon.com',     '$2b$10$nC8z0SCZQHJaitvyAhdjdu2sZH0jzkgNAd8J5LvfpVmGejxA/fBmi', 'stylist'), -- Password: stylist123
+('receptionist user','receptionist@suratsalon.com','$2b$10$Gv0zqZ1KMs/K7r8r9iNNzubIBS8LovDJRQXtj6YU9NpwQI1wtvzfu', 'receptionist'); -- Password: receptionist123
 
 
 -- ------------------------------------------------------------
@@ -204,21 +204,21 @@ values
 -- 9. bills (for completed appointments only)
 -- ------------------------------------------------------------
 insert into bills
-  (appointment_id, bill_number, subtotal, discount, tax, total, payment_method, bill_status, paid_at)
+  (appointment_id, bill_number, subtotal, discount, tax, total, commission_amount, payment_method, bill_status, paid_at)
 values
-(1,  'BILL-2025-001', 2500.00, 0.00,   0.00, 2500.00, 'card',  'paid', '2025-01-05 11:20:00'),
-(2,  'BILL-2025-002',  600.00, 0.00,   0.00,  600.00, 'cash',  'paid', '2025-01-05 10:05:00'),
-(3,  'BILL-2025-003',  300.00, 0.00,   0.00,  300.00, 'upi',   'paid', '2025-01-06 11:35:00'),
-(5,  'BILL-2025-004',  300.00, 0.00,   0.00,  300.00, 'cash',  'paid', '2025-01-07 10:05:00'),
-(6,  'BILL-2025-005', 5000.00, 0.00,   0.00, 5000.00, 'card',  'paid', '2025-01-07 13:10:00'),
-(8,  'BILL-2025-006',  500.00, 0.00,   0.00,  500.00, 'upi',   'paid', '2025-01-08 10:50:00'),
-(9,  'BILL-2025-007',  300.00, 0.00,   0.00,  300.00, 'cash',  'paid', '2025-01-09 10:05:00'),
-(11, 'BILL-2025-008', 2000.00, 100.00, 0.00, 1900.00, 'card',  'paid', '2025-01-10 12:35:00'),
-(12, 'BILL-2025-009',  600.00, 0.00,   0.00,  600.00, 'cash',  'paid', '2025-01-10 11:05:00'),
-(14, 'BILL-2025-010', 5000.00, 500.00, 0.00, 4500.00, 'card',  'paid', '2025-01-11 13:10:00'),
-(15, 'BILL-2025-011', 1800.00, 0.00,   0.00, 1800.00, 'upi',   'paid', '2025-01-12 11:35:00'),
-(16, 'BILL-2025-012',  500.00, 0.00,   0.00,  500.00, 'cash',  'paid', '2025-01-13 10:50:00'),
-(18, 'BILL-2025-013',  800.00, 0.00,   0.00,  800.00, 'wallet','paid', '2025-01-14 10:35:00'),
--- pending bills for scheduled appointments
-(19, 'BILL-2025-014', 2500.00, 0.00,   0.00, 2500.00, null,    'pending', null),
-(20, 'BILL-2025-015', 1800.00, 0.00,   0.00, 1800.00, null,    'pending', null);
+(1,  'BILL-2025-001', 2500.00, 0.00,   0.00, 2500.00, 500.00, 'card',  'paid', '2025-01-05 11:20:00'),
+(2,  'BILL-2025-002',  600.00, 0.00,   0.00,  600.00, 108.00, 'cash',  'paid', '2025-01-05 10:05:00'),
+(3,  'BILL-2025-003',  300.00, 0.00,   0.00,  300.00,  54.00, 'upi',   'paid', '2025-01-06 11:35:00'),
+(5,  'BILL-2025-004',  300.00, 0.00,   0.00,  300.00,  54.00, 'cash',  'paid', '2025-01-07 10:05:00'),
+(6,  'BILL-2025-005', 5000.00, 0.00,   0.00, 5000.00, 1100.00, 'card',  'paid', '2025-01-07 13:10:00'),
+(8,  'BILL-2025-006',  500.00, 0.00,   0.00,  500.00, 100.00, 'upi',   'paid', '2025-01-08 10:50:00'),
+(9,  'BILL-2025-007',  300.00, 0.00,   0.00,  300.00,  54.00, 'cash',  'paid', '2025-01-09 10:05:00'),
+(11, 'BILL-2025-008', 2000.00, 100.00, 0.00, 1900.00, 400.00, 'card',  'paid', '2025-01-10 12:35:00'),
+(12, 'BILL-2025-009',  600.00, 0.00,   0.00,  600.00, 108.00, 'cash',  'paid', '2025-01-10 11:05:00'),
+(14, 'BILL-2025-010', 5000.00, 500.00, 0.00, 4500.00, 1100.00, 'card',  'paid', '2025-01-11 13:10:00'),
+(15, 'BILL-2025-011', 1800.00, 0.00,   0.00, 1800.00, 360.00, 'upi',   'paid', '2025-01-12 11:35:00'),
+(16, 'BILL-2025-012',  500.00, 0.00,   0.00,  500.00, 100.00, 'cash',  'paid', '2025-01-13 10:50:00'),
+(17, 'BILL-2025-013',  600.00, 0.00,   0.00,  600.00, 108.00, 'wallet','paid', '2025-01-14 10:35:00'),
+(18, 'BILL-2025-014',  800.00, 0.00,   0.00,  800.00, 144.00, 'wallet','paid', '2025-01-14 10:35:00'),
+(19, 'BILL-2025-015', 2500.00, 0.00,   0.00, 2500.00, 500.00, null,    'pending', null),
+(20, 'BILL-2025-016', 1800.00, 0.00,   0.00, 1800.00, 360.00, null,    'pending', null);
