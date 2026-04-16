@@ -41,11 +41,14 @@ export class AuthController {
 
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    console.log('--- Refresh Token Request Received ---');
     const refreshToken = req.cookies?.refreshToken;
     if (!refreshToken) {
+      console.log('Refresh token missing from cookies');
       throw new UnauthorizedException('Refresh token missing from cookies');
     }
     const { accessToken } = await this.authService.refreshAccessToken(refreshToken);
+    console.log('New Access Token generated successfully');
     return { accessToken };
   }
 }

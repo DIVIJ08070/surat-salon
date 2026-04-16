@@ -9,12 +9,12 @@ create table users (
   role enum('admin','stylist','receptionist') not null,
   failed_attempts tinyint unsigned not null default 0,
   locked_until datetime null,
-  status          tinyint(1)       not null default 1, 
-  created_at      datetime         not null default current_timestamp,
-  updated_at      datetime         not null default current_timestamp on update current_timestamp,
+  status tinyint not null default 1, 
+  created_at datetime not null default current_timestamp,
+  updated_at datetime not null default current_timestamp on update current_timestamp,
 
   unique index uq_users_email (email),
-  index idx_users_status      (status)
+  index idx_users_status (status)
 );
 
 
@@ -26,8 +26,7 @@ create table refresh_tokens (
   device_name varchar(100) null,   
   ip_address varchar(45) null,    
   expires_at datetime not null,
-  is_revoked tinyint(1) not null default 0,
-  status tinyint(1) not null default 1, 
+  status tinyint not null default 1,
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -44,7 +43,7 @@ create table token_blacklist (
   id int not null auto_increment primary key,
   jti varchar(36) not null,
   expires_at datetime not null,  
-  status tinyint(1) not null default 1, 
+  status tinyint not null default 1, 
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -62,7 +61,7 @@ create table services (
   gender enum('male','female','unisex') not null default 'unisex',
   description text null,
   is_available tinyint(1) not null default 1,
-  status tinyint(1) not null default 1, 
+  status tinyint not null default 1, 
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -81,13 +80,17 @@ create table stylists (
   shift_start time not null,
   shift_end time not null,
   commission_rate decimal(5,2) not null default 0.00,
+  user_id int null,
   stylist_status enum('active','on_leave') not null default 'active',
-  status tinyint(1) not null default 1,
+  status tinyint not null default 1, 
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
   constraint chk_stylists_commission check (commission_rate >= 0 and commission_rate <= 100),
-  constraint chk_stylists_shift check (shift_end > shift_start)
+  constraint chk_stylists_shift check (shift_end > shift_start),
+
+  index idx_stylists_user_id (user_id),
+  constraint fk_stylists_user foreign key (user_id) references users(id) on delete set null
 );
 
 
@@ -95,7 +98,7 @@ create table stylist_services (
   id int not null auto_increment primary key,
   stylist_id int not null,
   service_id int not null,
-  status tinyint(1) not null default 1,
+  status tinyint not null default 1, 
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -115,7 +118,7 @@ create table customers (
   email varchar(150) null,
   gender enum('male','female','unisex') null,
   dob date null,
-  status tinyint(1) not null default 1,
+  status tinyint not null default 1, 
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -137,7 +140,7 @@ create table appointments (
   total_amount decimal(10,2) not null,
   appointment_status enum('scheduled','completed','cancelled','no_show') not null default 'scheduled',
   notes text null,
-  status tinyint(1) not null default 1, 
+  status tinyint not null default 1,
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -162,7 +165,7 @@ create table appointment_services (
   price_at_booking decimal(10,2) not null,
   duration_minutes smallint unsigned not null,
   appointment_service_status enum('pending','completed') not null default 'pending',
-  status tinyint(1) not null default 1, 
+  status tinyint not null default 1, 
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -183,7 +186,7 @@ create table time_slots (
   end_time time not null,
   slot_status enum('available','booked') not null default 'available',
   block_reason enum('appointment','leave') null default null,
-  status tinyint(1) not null default 1,
+  status tinyint not null default 1, 
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -208,7 +211,7 @@ create table bills (
   payment_method enum('cash','card','upi','wallet') null,
   bill_status enum('pending','paid','refunded') not null default 'pending',
   paid_at datetime null,
-  status tinyint(1) not null default 1,
+  status tinyint not null default 1, 
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 
@@ -233,7 +236,7 @@ create table stylist_leaves (
   leave_end time null,
   reason varchar(255) null,
   leave_status enum('pending','approved','rejected') not null default 'pending',
-  status tinyint(1) not null default 1,  
+  status tinyint not null default 1,
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp on update current_timestamp,
 

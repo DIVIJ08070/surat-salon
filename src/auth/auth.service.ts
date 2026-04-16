@@ -42,7 +42,7 @@ export class AuthService {
       const payload = { sub: user.id, email: user.email, role: user.role, jti };
       return this.jwtService.sign(payload, {
         secret: process.env.JWT_ACCESS_SECRET || 'development_access_secret',
-        expiresIn: (process.env.JWT_ACCESS_EXPIRATION || '15m') as StringValue,
+        expiresIn: (process.env.JWT_ACCESS_EXPIRATION || '1m') as StringValue,
       });
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -179,7 +179,11 @@ export class AuthService {
       let isValidToken = false;
       for (const token of activeTokens) {
         const isMatch = await bcrypt.compare(refreshToken, token.token_hash).catch(() => false);
-        if (isMatch) { isValidToken = true; break; }
+        if (isMatch) { 
+          isValidToken = true; 
+          console.log(`Refresh token match found in database for user ID: ${decoded.sub}`);
+          break; 
+        }
       }
 
       if (!isValidToken) throw new UnauthorizedException('Refresh token is inactive or logged out');

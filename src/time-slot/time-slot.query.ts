@@ -46,7 +46,7 @@ export const FIND_TIME_SLOT_BY_ID = `
 `;
 
 export const REMOVE_AVAILABLE_SLOTS_FOR_DATE = `
-  UPDATE time_slots SET status = 0
+  UPDATE time_slots SET status = 127
   WHERE stylist_id = ? AND slot_date = ? AND slot_status = 'available' AND status = 1
 `;
 

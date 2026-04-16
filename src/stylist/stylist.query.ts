@@ -40,7 +40,7 @@ export const CHECK_STYLIST_EXISTS = `
 `;
 
 export const DELETE_STYLIST = `
-  UPDATE stylists SET status = 0 WHERE id = ?
+  UPDATE stylists SET status = 127 WHERE id = ?
 `;
 
 export const CHECK_SERVICE_IDS_VALID = (placeholders: string) => `
@@ -69,7 +69,7 @@ export const CHECK_STYLIST_SERVICE_ASSIGNED = `
 `;
 
 export const REMOVE_STYLIST_SERVICE = `
-  UPDATE stylist_services SET status = 0 WHERE stylist_id = ? AND service_id = ?
+  UPDATE stylist_services SET status = 127 WHERE stylist_id = ? AND service_id = ?
 `;
 
 export const CHECK_STYLIST_CAN_DO_SERVICES = (placeholders: string) => `

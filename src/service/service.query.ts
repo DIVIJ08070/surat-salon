@@ -38,7 +38,7 @@ export const TOGGLE_SERVICE_AVAILABILITY = `
 `;
 
 export const DELETE_SERVICE = `
-  UPDATE services SET status = 0 WHERE id = ?
+  UPDATE services SET status = 127 WHERE id = ?
 `;
 
 export const UPDATE_SERVICE = (fields: string[]) => `

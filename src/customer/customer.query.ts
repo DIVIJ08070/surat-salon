@@ -44,7 +44,7 @@ export const FIND_CUSTOMER_BY_ID = `
 `;
 
 export const DELETE_CUSTOMER = `
-  UPDATE customers SET status = 0 WHERE id = ?
+  UPDATE customers SET status = 127 WHERE id = ?
 `;
 
 export const UPDATE_CUSTOMER = (fields: string[]) => `
