@@ -203,6 +203,7 @@ create table bills (
   discount decimal(10,2) not null default 0.00,
   tax decimal(10,2) not null default 0.00,
   total decimal(10,2) not null,
+  commission_amount decimal(10,2) not null default 0.00,
   payment_method enum('cash','card','upi','wallet') null,
   bill_status enum('pending','paid','refunded') not null default 'pending',
   paid_at datetime null,
@@ -216,6 +217,7 @@ create table bills (
   constraint chk_bills_total    check (total >= 0),
   constraint chk_bills_discount check (discount >= 0),
   constraint chk_bills_tax      check (tax >= 0),
+  constraint chk_bills_commission check (commission_amount >= 0),
 
   constraint fk_bills_appointment foreign key (appointment_id) references appointments(id) on delete cascade
 );
