@@ -33,6 +33,10 @@ async function bootstrap() {
   // Global Filters
   app.useGlobalFilters(new AllExceptionsFilter());
 
+  // Use helmet for security headers
+  const helmet = require('helmet');
+  app.use(helmet());
+
   // Use cookie-parser
   const cookieParser = require('cookie-parser');
   app.use(cookieParser());
@@ -43,7 +47,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Swagger Documentation Setup at /api/docs
+  
   const config = new DocumentBuilder()
     .setTitle('SuratSalon Hub API')
     .setDescription('Salon & Spa Appointment Management System')
