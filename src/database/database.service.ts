@@ -19,6 +19,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       user:     this.configService.get<string>('DB_USERNAME', 'root'),
       password: this.configService.get<string>('DB_PASSWORD', ''),
       database: this.configService.get<string>('DB_NAME',     'surat_salon'),
+      ssl: this.configService.get<string>('DB_SSL') === 'true' ? {
+        rejectUnauthorized: false
+      } : undefined,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
