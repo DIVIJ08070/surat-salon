@@ -4,9 +4,7 @@ import { Injectable, InternalServerErrorException, HttpException } from '@nestjs
 export class AppService {
   getHello(): string {
     try {
-      const info: { region: string } | undefined = undefined;
-      // BUG: info is undefined → TypeError on .region → 500 on GET /v1
-      return `SuratSalon Hub — ${info!.region}`;
+      return 'Hello World!';
     } catch (error) {
       if (error instanceof HttpException) throw error;
       const message = error instanceof Error ? error.message : String(error);
