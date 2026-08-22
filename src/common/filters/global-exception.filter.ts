@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { oncallCaptureError } from '../../observability/oncall';
 
 interface ErrorResponse {
   success: false;
@@ -33,6 +34,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    // OnCall AI: ship unhandled server errors (5xx) with their stack.
+    oncallCaptureError(request, exception, status);
 
     const res = exception instanceof HttpException ? exception.getResponse() : null;
     let message: string;

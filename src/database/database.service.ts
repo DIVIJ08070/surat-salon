@@ -29,6 +29,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('MySQL connection pool created');
   }
 
+  /** The live mysql2 pool — read-only access for observability (OnCall AI). */
+  getPool(): Pool {
+    return this.pool;
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
     this.logger.log('MySQL connection pool closed');

@@ -5,6 +5,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/global-exception.filter';
 import { SuccessInterceptor } from './common/interceptors/response.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { oncallMiddleware, startOncall } from './observability/oncall';
+import { DatabaseService } from './database/database.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -41,6 +43,9 @@ async function bootstrap() {
   const cookieParser = require('cookie-parser');
   app.use(cookieParser());
 
+  // OnCall AI observability — per-request telemetry (fail-silent, non-blocking)
+  app.use(oncallMiddleware());
+
   // Enable CORS securely for Auth Cookies
   app.enableCors({
     origin: 'http://localhost:5173',
@@ -57,6 +62,9 @@ async function bootstrap() {
   
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
+
+  // OnCall AI observability — host sampler with the REAL MySQL pool stats
+  startOncall(app.get(DatabaseService).getPool());
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
