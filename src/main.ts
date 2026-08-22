@@ -63,11 +63,12 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  // OnCall AI observability — host sampler with the REAL MySQL pool stats
-  startOncall(app.get(DatabaseService).getPool());
-
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
+
+  // OnCall AI observability — host sampler with the REAL MySQL pool stats.
+  // After listen(): Nest runs onModuleInit during init, so the pool exists now.
+  startOncall(app.get(DatabaseService).getPool());
   console.log(`Application is running on: http://localhost:${port}`);
   console.log(`Swagger Docs available at: http://localhost:${port}/api/docs`);
 }
